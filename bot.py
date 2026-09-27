@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Optional
+from difflib import SequenceMatcher
 
 from telegram import Update
 from telegram.ext import (
@@ -27,10 +27,6 @@ if not TOKEN:
 BASE_DIR = Path(__file__).resolve().parent
 DATA_FILE = BASE_DIR / "knowledge.json"
 
-# ВАЖНО:
-# Сюда можно вписать Telegram ID администраторов.
-# Пока оставляем пустым — бот автоматически разрешит
-# админские команды администраторам группы.
 STATIC_ADMIN_IDS = set()
 
 
@@ -47,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# DEFAULT KNOWLEDGE
+# DEFAULT DATA
 # ============================================================
 
 DEFAULT_DATA = {
@@ -68,19 +64,28 @@ DEFAULT_DATA = {
             "category": "housing",
             "question": "Где искать квартиру или жильё в Гуанчжоу?",
             "answer": (
-                "Для поиска жилья в группе чаще всего обсуждали 58, Ziroom и Welcee. "
+                "Для поиска жилья в группе обсуждались 58, Ziroom и Welcee. "
                 "Также можно искать через риелторов и местные чаты.\n\n"
                 "Если нужен конкретный район, бюджет или срок аренды — "
-                "напиши их, и я попробую подобрать информацию из базы."
+                "напиши их."
             ),
             "keywords": [
                 "квартира",
+                "квартиру",
+                "квартиры",
+                "квартир",
                 "жилье",
                 "жильё",
+                "жилья",
                 "аренда",
+                "арендовать",
                 "снять",
+                "снять квартиру",
+                "снять жилье",
                 "апартаменты",
                 "комната",
+                "комнату",
+                "комнаты",
                 "риелтор",
                 "риэлтор",
                 "58",
@@ -103,10 +108,16 @@ DEFAULT_DATA = {
                 "детский сад",
                 "садик",
                 "сад",
+                "детсад",
                 "школа",
+                "школу",
+                "школы",
                 "ребенок",
                 "ребёнок",
+                "ребенка",
+                "ребёнка",
                 "дети",
+                "детей",
                 "родители",
                 "русская школа",
                 "английский"
@@ -118,22 +129,32 @@ DEFAULT_DATA = {
             "category": "medical",
             "question": "Где искать врача или медицинского переводчика?",
             "answer": (
-                "В группе были контакты и рекомендации по русскоязычным/англоязычным "
-                "врачам, стоматологам, клиникам и медицинским переводчикам.\n\n"
+                "В группе были контакты и рекомендации по русскоязычным и "
+                "англоязычным врачам, стоматологам, клиникам и медицинским "
+                "переводчикам.\n\n"
                 "Напиши город, специальность врача и желаемый язык общения."
             ),
             "keywords": [
                 "врач",
+                "врача",
+                "врачу",
+                "врачи",
                 "клиника",
+                "клинику",
                 "стоматолог",
+                "стоматолога",
                 "зуб",
                 "зубы",
+                "зубной",
                 "дантист",
                 "медицина",
+                "медицинский",
                 "переводчик",
+                "переводчика",
                 "акупунктура",
                 "иголки",
-                "терапевт"
+                "терапевт",
+                "доктор"
             ]
         },
 
@@ -142,21 +163,28 @@ DEFAULT_DATA = {
             "category": "pets",
             "question": "Вопросы по животным и перевозке питомцев",
             "answer": (
-                "В группе обсуждались ввоз и вывоз собак, прививки, анализ на антитела, "
-                "ветеринарные документы, государственные ветклиники и жильё с животными.\n\n"
-                "Для точных требований по перевозке животного нужно уточнять страну "
-                "назначения, дату поездки и маршрут."
+                "В группе обсуждались ввоз и вывоз собак, прививки, анализ на "
+                "антитела, ветеринарные документы, государственные ветклиники "
+                "и жильё с животными.\n\n"
+                "Для перевозки животного нужно уточнять страну назначения, "
+                "дату поездки и маршрут."
             ),
             "keywords": [
                 "собака",
                 "собаку",
+                "собаки",
                 "кот",
+                "кота",
                 "кошка",
+                "кошку",
                 "питомец",
+                "питомца",
                 "животное",
+                "животных",
                 "ветеринар",
                 "вет",
                 "прививка",
+                "прививки",
                 "антитела",
                 "ветпаспорт",
                 "карантин"
@@ -174,13 +202,20 @@ DEFAULT_DATA = {
             ),
             "keywords": [
                 "машина",
+                "машину",
                 "авто",
                 "автомобиль",
+                "автомобиля",
                 "аренда авто",
+                "аренда машины",
                 "прокат",
                 "скутер",
+                "скутера",
+                "скутер",
                 "мотоцикл",
+                "мотоцикла",
                 "байк",
+                "байка",
                 "спортбайк",
                 "права",
                 "водительские"
@@ -205,10 +240,16 @@ DEFAULT_DATA = {
                 "карго",
                 "cargo",
                 "доставка",
+                "доставку",
                 "груз",
+                "груза",
+                "грузов",
                 "посылка",
+                "посылку",
                 "отправить",
+                "отправка",
                 "перевезти",
+                "перевозка",
                 "москва",
                 "питер",
                 "санкт петербург",
@@ -222,9 +263,10 @@ DEFAULT_DATA = {
             "category": "money",
             "question": "Вопросы по Alipay, WeChat Pay и банковским переводам",
             "answer": (
-                "В группе обсуждались пополнение Alipay и WeChat Pay, переводы из России, "
-                "китайские банковские карты и обмен рублей/юаней.\n\n"
-                "Напиши конкретную ситуацию — например, откуда и куда нужно перевести деньги."
+                "В группе обсуждались пополнение Alipay и WeChat Pay, переводы "
+                "из России, китайские банковские карты и обмен рублей/юаней.\n\n"
+                "Напиши конкретную ситуацию — например, откуда и куда нужно "
+                "перевести деньги."
             ),
             "keywords": [
                 "alipay",
@@ -233,11 +275,18 @@ DEFAULT_DATA = {
                 "weixin",
                 "вичат",
                 "деньги",
+                "деньги",
                 "перевод",
+                "перевести",
                 "рубли",
+                "рублей",
                 "юани",
+                "юаней",
                 "банк",
+                "банка",
+                "банковский",
                 "карта",
+                "карты",
                 "сбер",
                 "тинькофф",
                 "тбанк",
@@ -250,20 +299,23 @@ DEFAULT_DATA = {
             "category": "visa",
             "question": "Вопросы по визам и пребыванию в Китае",
             "answer": (
-                "В группе обсуждались визы, безвизовый въезд, бизнес-визы, сроки пребывания "
-                "и выезды/повторные въезды.\n\n"
-                "Важный момент: визовые правила могут меняться. Старое сообщение из группы "
-                "нельзя автоматически считать актуальным.\n\n"
-                "Для точного ответа нужно знать гражданство, тип визы, дату въезда "
-                "и текущий маршрут."
+                "В группе обсуждались визы, безвизовый въезд, бизнес-визы, "
+                "сроки пребывания и выезды/повторные въезды.\n\n"
+                "Важно: визовые правила могут меняться. Старое сообщение "
+                "из группы нельзя автоматически считать актуальным.\n\n"
+                "Для точного ответа нужно знать гражданство, тип визы, дату "
+                "въезда и текущий маршрут."
             ),
             "keywords": [
                 "виза",
                 "визу",
+                "визы",
+                "визе",
                 "безвиз",
                 "безвизовый",
                 "visa",
                 "граница",
+                "границу",
                 "border",
                 "border run",
                 "выезд",
@@ -279,26 +331,29 @@ DEFAULT_DATA = {
             "category": "work",
             "question": "Где искать работу или подработку?",
             "answer": (
-                "В группе публиковались вакансии и разовые подработки: "
-                "переводы, закупки, работа с китайскими поставщиками, e-commerce, "
-                "салоны, сопровождение мероприятий и другие варианты.\n\n"
+                "В группе публиковались вакансии и разовые подработки: переводы, "
+                "закупки, работа с китайскими поставщиками, e-commerce, салоны, "
+                "сопровождение мероприятий и другие варианты.\n\n"
                 "Напиши город, навыки, знание китайского и какой формат работы нужен."
             ),
             "keywords": [
                 "работа",
+                "работу",
+                "работы",
                 "вакансия",
                 "вакансии",
                 "подработка",
                 "подработку",
-                "работу",
                 "зарплата",
-                "китаец",
+                "зарплату",
                 "китайский",
-                "hsK",
+                "hsk",
                 "закупки",
+                "закупщик",
                 "байер",
                 "менеджер",
-                "e-commerce"
+                "e-commerce",
+                "заработок"
             ]
         },
 
@@ -314,13 +369,18 @@ DEFAULT_DATA = {
             ),
             "keywords": [
                 "рынок",
+                "рынки",
+                "рынок электроники",
                 "магазин",
+                "магазины",
                 "электроника",
                 "телефон",
+                "телефоны",
                 "айфон",
                 "наушники",
                 "одежда",
                 "ткань",
+                "ткани",
                 "мебель",
                 "запчасти",
                 "продукты",
@@ -341,13 +401,18 @@ DEFAULT_DATA = {
             ),
             "keywords": [
                 "фабрика",
+                "фабрики",
+                "фабрику",
                 "поставщик",
                 "поставщики",
+                "поставщика",
                 "производство",
                 "товар",
+                "товары",
                 "закупка",
                 "закупки",
                 "посредник",
+                "посредники",
                 "инспектор",
                 "проверка фабрики",
                 "опт"
@@ -359,13 +424,16 @@ DEFAULT_DATA = {
             "category": "language",
             "question": "Где найти переводчика?",
             "answer": (
-                "В группе есть запросы на переводчиков для разных задач: "
-                "бытовое общение, врачи, переговоры, фабрики, рынки тканей и закупки.\n\n"
+                "В группе есть запросы на переводчиков для разных задач: бытовое "
+                "общение, врачи, переговоры, фабрики, рынки тканей и закупки.\n\n"
                 "Напиши город, язык и для чего нужен переводчик."
             ),
             "keywords": [
                 "переводчик",
+                "переводчика",
+                "переводчики",
                 "перевод",
+                "перевести",
                 "китаец",
                 "китайский",
                 "английский",
@@ -386,17 +454,22 @@ DEFAULT_DATA = {
             ),
             "keywords": [
                 "маникюр",
+                "маникюра",
                 "педикюр",
+                "педикюра",
                 "ногти",
                 "ресницы",
+                "ресниц",
                 "волосы",
+                "волос",
                 "парикмахер",
                 "окрашивание",
                 "наращивание",
                 "лазер",
                 "эпиляция",
                 "салон",
-                "мастер"
+                "мастер",
+                "мастера"
             ]
         },
 
@@ -415,13 +488,17 @@ DEFAULT_DATA = {
                 "куда сходить",
                 "куда пойти",
                 "бар",
+                "бары",
                 "клуб",
+                "клубы",
                 "дискотека",
                 "кальян",
+                "кальянная",
                 "теннис",
                 "спорт",
                 "open mic",
                 "мероприятие",
+                "мероприятия",
                 "тусовка",
                 "досуг"
             ]
@@ -448,6 +525,7 @@ DEFAULT_DATA = {
                 "сим",
                 "sim",
                 "симка",
+                "симкарта",
                 "china mobile",
                 "связь"
             ]
@@ -461,13 +539,15 @@ DEFAULT_DATA = {
                 "В группе регулярно спрашивали про районы Гуанчжоу и Фошаня: "
                 "стоимость жилья, метро, школы, русскоязычное окружение, рынки "
                 "и удобство для семей.\n\n"
-                "Напиши бюджет, место работы/учёбы и важные условия — "
-                "например, метро, школа, тишина или русское окружение."
+                "Напиши бюджет, место работы/учёбы и важные условия — например, "
+                "метро, школа, тишина или русское окружение."
             ),
             "keywords": [
                 "район",
+                "районы",
                 "где жить",
                 "жить в",
+                "выбрать район",
                 "лучший район",
                 "дешевый район",
                 "дешёвый район",
@@ -475,9 +555,10 @@ DEFAULT_DATA = {
                 "русские",
                 "русский район",
                 "семья",
+                "семейный",
                 "фошань",
-                "гуанчжоу",
                 "фошане",
+                "гуанчжоу",
                 "гуанчжоу"
             ]
         }
@@ -489,14 +570,31 @@ DEFAULT_DATA = {
 # DATA
 # ============================================================
 
+def save_data(data):
+    temp_file = DATA_FILE.with_suffix(".tmp")
+
+    with open(temp_file, "w", encoding="utf-8") as file:
+        json.dump(
+            data,
+            file,
+            ensure_ascii=False,
+            indent=2
+        )
+
+    temp_file.replace(DATA_FILE)
+
+
 def load_data():
     if not DATA_FILE.exists():
         save_data(DEFAULT_DATA)
-        return DEFAULT_DATA.copy()
+        return DEFAULT_DATA
 
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as file:
             data = json.load(file)
+
+        if not isinstance(data, dict):
+            raise ValueError("knowledge.json должен содержать JSON-объект")
 
         if "faq" not in data:
             data["faq"] = []
@@ -507,80 +605,272 @@ def load_data():
         return data
 
     except Exception as error:
-        logger.exception("Ошибка чтения knowledge.json: %s", error)
-        return DEFAULT_DATA.copy()
-
-
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as file:
-        json.dump(
-            data,
-            file,
-            ensure_ascii=False,
-            indent=2
+        logger.exception(
+            "Ошибка чтения knowledge.json: %s",
+            error
         )
+
+        # Если файл битый — используем встроенную базу.
+        return DEFAULT_DATA
 
 
 DATA = load_data()
 
 
 # ============================================================
-# HELPERS
+# TEXT NORMALIZATION
 # ============================================================
 
 def normalize(text: str) -> str:
-    text = text.lower().replace("ё", "е")
+    text = text.lower()
 
-    text = re.sub(r"https?://\S+", " ", text)
-    text = re.sub(r"[^a-zа-я0-9\s\-]", " ", text)
+    text = text.replace("ё", "е")
+    text = text.replace("—", " ")
+    text = text.replace("–", " ")
+    text = text.replace("-", " ")
 
-    text = re.sub(r"\s+", " ", text)
+    text = re.sub(
+        r"https?://\S+",
+        " ",
+        text
+    )
+
+    text = re.sub(
+        r"[^a-zа-я0-9\s]",
+        " ",
+        text
+    )
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    )
 
     return text.strip()
 
 
 def tokenize(text: str):
-    return set(normalize(text).split())
+    return set(
+        normalize(text).split()
+    )
+
+
+# ============================================================
+# SIMPLE RUSSIAN WORD NORMALIZATION
+# ============================================================
+
+WORD_REPLACEMENTS = {
+    # жильё
+    "квартиру": "квартира",
+    "квартиры": "квартира",
+    "квартирой": "квартира",
+    "квартире": "квартира",
+    "квартир": "квартира",
+
+    "жилья": "жилье",
+    "жилью": "жилье",
+    "жильем": "жилье",
+    "жилье": "жилье",
+
+    "комнату": "комната",
+    "комнаты": "комната",
+    "комнате": "комната",
+    "комнатой": "комната",
+
+    # дети
+    "ребенка": "ребенок",
+    "ребенку": "ребенок",
+    "ребенком": "ребенок",
+    "детей": "дети",
+    "детям": "дети",
+
+    # врачи
+    "врача": "врач",
+    "врачу": "врач",
+    "врачи": "врач",
+    "врачом": "врач",
+
+    "клинику": "клиника",
+    "клинике": "клиника",
+    "клиник": "клиника",
+
+    "стоматолога": "стоматолог",
+
+    # животные
+    "собаку": "собака",
+    "собаки": "собака",
+    "собакой": "собака",
+
+    "кошку": "кошка",
+    "кошки": "кошка",
+
+    "кота": "кот",
+    "коты": "кот",
+
+    "питомца": "питомец",
+    "питомцы": "питомец",
+
+    # транспорт
+    "машину": "машина",
+    "машины": "машина",
+    "машиной": "машина",
+
+    "автомобиль": "авто",
+    "автомобиля": "авто",
+
+    "мотоцикла": "мотоцикл",
+    "мотоциклы": "мотоцикл",
+
+    "скутера": "скутер",
+
+    # деньги
+    "рублей": "рубли",
+    "рубля": "рубли",
+    "юаней": "юани",
+    "юаня": "юани",
+
+    "карты": "карта",
+    "карту": "карта",
+
+    # работа
+    "работу": "работа",
+    "работы": "работа",
+
+    "вакансии": "вакансия",
+    "вакансию": "вакансия",
+
+    "подработку": "подработка",
+    "подработки": "подработка",
+
+    "зарплату": "зарплата",
+
+    # покупки
+    "рынки": "рынок",
+    "магазины": "магазин",
+    "магазина": "магазин",
+    "ткани": "ткань",
+    "тканей": "ткань",
+    "товары": "товар",
+
+    # поставщики
+    "поставщики": "поставщик",
+    "поставщика": "поставщик",
+    "фабрики": "фабрика",
+    "фабрику": "фабрика",
+    "посредники": "посредник",
+
+    # красота
+    "маникюра": "маникюр",
+    "педикюра": "педикюр",
+    "мастера": "мастер",
+
+    # виза
+    "визу": "виза",
+    "визы": "виза",
+    "визе": "виза",
+
+    # перевод
+    "переводчика": "переводчик",
+    "переводчики": "переводчик",
+
+    # карго
+    "посылку": "посылка",
+    "посылки": "посылка",
+    "груза": "груз",
+    "грузов": "груз",
+    "доставку": "доставка"
+}
+
+
+def canonical_word(word: str) -> str:
+    return WORD_REPLACEMENTS.get(
+        word,
+        word
+    )
+
+
+def canonical_tokens(text: str):
+    words = normalize(text).split()
+
+    return {
+        canonical_word(word)
+        for word in words
+    }
+
+
+# ============================================================
+# QUESTION DETECTION
+# ============================================================
+
+QUESTION_WORDS = {
+    "где",
+    "как",
+    "кто",
+    "что",
+    "сколько",
+    "какой",
+    "какая",
+    "какие",
+    "какое",
+    "можно",
+    "нужен",
+    "нужна",
+    "нужно",
+    "ищу",
+    "ищем",
+    "посоветуйте",
+    "подскажите",
+    "есть",
+    "кто знает"
+}
+
+
+REQUEST_WORDS = {
+    "ищу",
+    "нужен",
+    "нужна",
+    "нужно",
+    "посоветуйте",
+    "подскажите",
+    "помогите",
+    "ищем",
+    "где найти",
+    "кто знает",
+    "кто может",
+    "кто подскажет",
+    "можно узнать",
+    "есть ли"
+}
 
 
 def is_question_like(text: str) -> bool:
     normalized = normalize(text)
 
-    question_words = {
-        "где",
-        "как",
-        "кто",
-        "что",
-        "сколько",
-        "какой",
-        "какая",
-        "какие",
-        "можно",
-        "нужен",
-        "нужна",
-        "нужно",
-        "подскажите",
-        "посоветуйте",
-        "ищу",
-        "ищем",
-        "есть",
-        "кто знает",
-        "подскажите пожалуйста"
-    }
-
     if "?" in text:
         return True
 
-    for word in question_words:
-        if word in normalized:
+    for phrase in REQUEST_WORDS:
+        if phrase in normalized:
             return True
+
+    words = set(normalized.split())
+
+    if words.intersection(QUESTION_WORDS):
+        return True
 
     return False
 
 
+# ============================================================
+# FAQ SEARCH
+# ============================================================
+
 def score_faq(text: str, faq_item: dict) -> int:
     normalized = normalize(text)
-    tokens = tokenize(text)
+
+    original_tokens = set(normalized.split())
+    tokens = canonical_tokens(text)
 
     score = 0
 
@@ -590,15 +880,84 @@ def score_faq(text: str, faq_item: dict) -> int:
         if not keyword_normalized:
             continue
 
-        # Фраза
+        keyword_words = keyword_normalized.split()
+
+        # ----------------------------------------------------
+        # Точная фраза
+        # ----------------------------------------------------
+
         if " " in keyword_normalized:
             if keyword_normalized in normalized:
-                score += 4
+                score += 8
+                continue
+
+            # Канонизируем слова фразы
+            canonical_phrase = " ".join(
+                canonical_word(word)
+                for word in keyword_words
+            )
+
+            canonical_text = " ".join(
+                canonical_word(word)
+                for word in normalized.split()
+            )
+
+            if canonical_phrase in canonical_text:
+                score += 7
+
             continue
 
-        # Одно слово
-        if keyword_normalized in tokens:
-            score += 2
+        # ----------------------------------------------------
+        # Точное слово
+        # ----------------------------------------------------
+
+        keyword_canonical = canonical_word(
+            keyword_normalized
+        )
+
+        if keyword_canonical in tokens:
+            score += 3
+            continue
+
+        # ----------------------------------------------------
+        # Частичное совпадение
+        # Например:
+        # квартира / квартирой
+        # переводчик / переводчики
+        # ----------------------------------------------------
+
+        for token in tokens:
+            if len(keyword_canonical) < 4:
+                continue
+
+            if (
+                len(token) >= 4
+                and (
+                    token.startswith(keyword_canonical)
+                    or keyword_canonical.startswith(token)
+                )
+            ):
+                score += 1
+                break
+
+        # ----------------------------------------------------
+        # Небольшая защита от опечаток
+        # ----------------------------------------------------
+
+        if len(keyword_canonical) >= 5:
+            for token in original_tokens:
+                if len(token) < 5:
+                    continue
+
+                ratio = SequenceMatcher(
+                    None,
+                    keyword_canonical,
+                    token
+                ).ratio()
+
+                if ratio >= 0.88:
+                    score += 1
+                    break
 
     return score
 
@@ -612,23 +971,30 @@ def find_best_faq(text: str):
     results = []
 
     for item in faq:
-        score = score_faq(text, item)
+        score = score_faq(
+            text,
+            item
+        )
 
         if score > 0:
-            results.append((score, item))
+            results.append(
+                (score, item)
+            )
 
     if not results:
         return None, 0
 
     results.sort(
-        key=lambda x: x[0],
+        key=lambda item: item[0],
         reverse=True
     )
 
-    best_score, best_item = results[0]
+    return results[0][1], results[0][0]
 
-    return best_item, best_score
 
+# ============================================================
+# FAQ DISPLAY
+# ============================================================
 
 def format_faq_list():
     faq = DATA.get("faq", [])
@@ -636,7 +1002,9 @@ def format_faq_list():
     if not faq:
         return "📚 FAQ пока пуст."
 
-    lines = ["📚 Разделы FAQ:\n"]
+    lines = [
+        "📚 Список FAQ:\n"
+    ]
 
     for item in faq:
         lines.append(
@@ -646,30 +1014,46 @@ def format_faq_list():
     return "\n".join(lines)
 
 
-def get_admin_ids(update: Update):
+# ============================================================
+# ADMIN
+# ============================================================
+
+async def get_admin_ids(update: Update):
     chat = update.effective_chat
 
     if not chat:
-        return set()
+        return set(STATIC_ADMIN_IDS)
+
+    admins = set(
+        STATIC_ADMIN_IDS
+    )
 
     try:
-        admins = set(STATIC_ADMIN_IDS)
-
-        administrators = chat.get_administrators()
+        administrators = await context_bot_get_admins(
+            chat.id
+        )
 
         for admin in administrators:
             if admin.user:
-                admins.add(admin.user.id)
-
-        return admins
+                admins.add(
+                    admin.user.id
+                )
 
     except Exception as error:
         logger.warning(
-            "Не удалось получить список администраторов: %s",
+            "Не удалось получить администраторов: %s",
             error
         )
 
-        return set(STATIC_ADMIN_IDS)
+    return admins
+
+
+async def context_bot_get_admins(chat_id: int):
+    # Получаем объект бота через глобальный application.
+    # Реализуется через telegram Bot API.
+    return await GLOBAL_BOT.get_chat_administrators(
+        chat_id
+    )
 
 
 async def is_admin(update: Update) -> bool:
@@ -678,24 +1062,50 @@ async def is_admin(update: Update) -> bool:
     if not user:
         return False
 
-    admin_ids = await get_admin_ids(update)
+    if user.id in STATIC_ADMIN_IDS:
+        return True
 
-    return user.id in admin_ids
+    chat = update.effective_chat
+
+    if not chat:
+        return False
+
+    try:
+        member = await GLOBAL_BOT.get_chat_member(
+            chat.id,
+            user.id
+        )
+
+        return member.status in {
+            "administrator",
+            "creator"
+        }
+
+    except Exception as error:
+        logger.warning(
+            "Не удалось проверить администратора: %s",
+            error
+        )
+
+        return False
 
 
 # ============================================================
 # COMMANDS
 # ============================================================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     await update.message.reply_text(
         "👋 Я на связи!\n\n"
         "Я помощник группы и умею искать информацию "
-        "по базе FAQ.\n\n"
-        "Напиши:\n"
+        "по базе группы.\n\n"
         "/help — помощь\n"
-        "/faq — что я умею искать\n"
-        "/rules — правила\n\n"
+        "/faq — что умею искать\n"
+        "/rules — правила\n"
+        "/listfaq — список FAQ\n\n"
         "Или просто задай вопрос обычным сообщением."
     )
 
@@ -708,13 +1118,13 @@ async def help_command(
         "🤖 Команды:\n\n"
         "/start — запуск\n"
         "/help — помощь\n"
-        "/faq — категории информации\n"
+        "/faq — категории\n"
         "/rules — правила\n"
         "/listfaq — список FAQ\n\n"
-        "👑 Администраторам:\n"
+        "👑 Для администраторов:\n"
         "/addfaq вопрос | ответ\n"
         "/delfaq номер\n\n"
-        "Можно просто написать вопрос обычным сообщением."
+        "Также можно просто написать вопрос."
     )
 
 
@@ -748,7 +1158,10 @@ async def rules_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-    rules = DATA.get("rules", [])
+    rules = DATA.get(
+        "rules",
+        []
+    )
 
     if not rules:
         await update.message.reply_text(
@@ -758,10 +1171,15 @@ async def rules_command(
 
     text = "📋 Правила:\n\n"
 
-    for index, rule in enumerate(rules, start=1):
+    for index, rule in enumerate(
+        rules,
+        start=1
+    ):
         text += f"{index}. {rule}\n"
 
-    await update.message.reply_text(text)
+    await update.message.reply_text(
+        text
+    )
 
 
 async def list_faq_command(
@@ -774,7 +1192,7 @@ async def list_faq_command(
 
 
 # ============================================================
-# ADMIN COMMANDS
+# ADMIN FAQ
 # ============================================================
 
 async def add_faq_command(
@@ -789,7 +1207,10 @@ async def add_faq_command(
 
     raw_text = update.message.text
 
-    parts = raw_text.split("|", 1)
+    parts = raw_text.split(
+        "|",
+        1
+    )
 
     if len(parts) != 2:
         await update.message.reply_text(
@@ -800,7 +1221,16 @@ async def add_faq_command(
         )
         return
 
-    question = parts[0].replace("/addfaq", "").strip()
+    question = (
+        parts[0]
+        .replace(
+            "/addfaq",
+            "",
+            1
+        )
+        .strip()
+    )
+
     answer = parts[1].strip()
 
     if not question or not answer:
@@ -809,17 +1239,28 @@ async def add_faq_command(
         )
         return
 
-    faq = DATA.setdefault("faq", [])
+    faq = DATA.setdefault(
+        "faq",
+        []
+    )
 
-    existing_ids = [
+    ids = [
         item.get("id", 0)
         for item in faq
-        if isinstance(item.get("id", 0), int)
+        if isinstance(
+            item.get("id", 0),
+            int
+        )
     ]
 
-    new_id = max(existing_ids, default=0) + 1
+    new_id = max(
+        ids,
+        default=0
+    ) + 1
 
-    keywords = list(tokenize(question))
+    keywords = list(
+        tokenize(question)
+    )
 
     new_item = {
         "id": new_id,
@@ -829,9 +1270,13 @@ async def add_faq_command(
         "keywords": keywords
     }
 
-    faq.append(new_item)
+    faq.append(
+        new_item
+    )
 
-    save_data(DATA)
+    save_data(
+        DATA
+    )
 
     await update.message.reply_text(
         f"✅ FAQ добавлен.\n\n"
@@ -851,25 +1296,35 @@ async def delete_faq_command(
 
     raw_text = update.message.text
 
-    value = raw_text.replace("/delfaq", "").strip()
+    value = (
+        raw_text
+        .replace(
+            "/delfaq",
+            "",
+            1
+        )
+        .strip()
+    )
 
     if not value.isdigit():
         await update.message.reply_text(
             "Формат:\n\n"
-            "/delfaq номер\n\n"
-            "Например:\n"
-            "/delfaq 17"
+            "/delfaq номер"
         )
         return
 
     faq_id = int(value)
 
-    faq = DATA.get("faq", [])
+    faq = DATA.get(
+        "faq",
+        []
+    )
 
     old_length = len(faq)
 
     DATA["faq"] = [
-        item for item in faq
+        item
+        for item in faq
         if item.get("id") != faq_id
     ]
 
@@ -879,7 +1334,9 @@ async def delete_faq_command(
         )
         return
 
-    save_data(DATA)
+    save_data(
+        DATA
+    )
 
     await update.message.reply_text(
         f"🗑 FAQ #{faq_id} удалён."
@@ -887,7 +1344,7 @@ async def delete_faq_command(
 
 
 # ============================================================
-# NATURAL LANGUAGE SEARCH
+# NATURAL LANGUAGE
 # ============================================================
 
 async def handle_message(
@@ -905,32 +1362,50 @@ async def handle_message(
     if not text:
         return
 
-    # Команды обрабатываются отдельными handlers
     if text.startswith("/"):
         return
 
-    normalized = normalize(text)
+    normalized = normalize(
+        text
+    )
 
-    # Очень короткие сообщения игнорируем
-    if len(normalized) < 5:
+    if len(normalized) < 4:
         return
 
-    faq_item, score = find_best_faq(text)
+    faq_item, score = find_best_faq(
+        text
+    )
 
-    # Низкая уверенность — молчим
-    if not faq_item or score < 4:
+    if not faq_item:
         return
 
-    # Если сообщение явно не вопрос и похоже на обычный разговор,
-    # бот не вмешивается.
-    if not is_question_like(text) and score < 6:
+    question_like = is_question_like(
+        text
+    )
+
+    # Для явного вопроса достаточно небольшого совпадения.
+    #
+    # Для обычного сообщения требуется более сильное совпадение,
+    # чтобы бот не вмешивался в разговор.
+
+    if question_like:
+        minimum_score = 3
+    else:
+        minimum_score = 7
+
+    if score < minimum_score:
         return
 
-    answer = faq_item["answer"]
+    logger.info(
+        "FAQ match: score=%s category=%s text=%r",
+        score,
+        faq_item.get("category"),
+        text
+    )
 
     await update.message.reply_text(
-        f"🤖 Похоже, это по теме «{faq_item['question']}».\n\n"
-        f"{answer}"
+        "🤖 Нашёл в базе информацию по этой теме:\n\n"
+        f"{faq_item['answer']}"
     )
 
 
@@ -952,39 +1427,67 @@ async def error_handler(
 # MAIN
 # ============================================================
 
+GLOBAL_BOT = None
+
+
 def main():
+    global GLOBAL_BOT
+
     application = (
         Application.builder()
         .token(TOKEN)
         .build()
     )
 
+    GLOBAL_BOT = application.bot
+
     application.add_handler(
-        CommandHandler("start", start)
+        CommandHandler(
+            "start",
+            start
+        )
     )
 
     application.add_handler(
-        CommandHandler("help", help_command)
+        CommandHandler(
+            "help",
+            help_command
+        )
     )
 
     application.add_handler(
-        CommandHandler("faq", faq_command)
+        CommandHandler(
+            "faq",
+            faq_command
+        )
     )
 
     application.add_handler(
-        CommandHandler("rules", rules_command)
+        CommandHandler(
+            "rules",
+            rules_command
+        )
     )
 
     application.add_handler(
-        CommandHandler("listfaq", list_faq_command)
+        CommandHandler(
+            "listfaq",
+            list_faq_command
+        )
     )
 
     application.add_handler(
-        CommandHandler("addfaq", add_faq_command)
+        CommandHandler(
+            "addfaq",
+            add_faq_command
+        )
     )
 
     application.add_handler(
-        CommandHandler("delfaq", delete_faq_command)
+        CommandHandler(
+            "delfaq",
+            delete_faq_command
+        )
     )
 
     application.add_handler(
@@ -994,10 +1497,12 @@ def main():
         )
     )
 
-    application.add_error_handler(error_handler)
+    application.add_error_handler(
+        error_handler
+    )
 
     logger.info(
-        "🚀 Бот запускается..."
+        "🚀 BezenvKitae Helper запускается..."
     )
 
     application.run_polling(
