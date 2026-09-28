@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DATA = {
     "settings": {
-        "version": "0.5.5",
+        "version": "0.5.6",
         "announcement_default_days": 3,
         "max_search_results": 5,
     },
@@ -942,6 +942,14 @@ def save_data(data):
 
 DATA = load_data()
 
+# Простая оперативная статистика процесса. После перезапуска Railway
+# счётчики обнуляются; позже перенесём их в постоянную БД.
+STATS = {
+    "questions_seen": 0,
+    "redirected": 0,
+    "ignored": 0,
+}
+
 
 # ============================================================
 # TEXT HELPERS
@@ -1555,6 +1563,16 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "📊 Статистика текущего запуска\n\n"
+        f"❓ Вопросов распознано: {STATS['questions_seen']}\n"
+        f"➡️ Перенаправлено: {STATS['redirected']}\n"
+        f"🤐 Проигнорировано: {STATS['ignored']}"
+    )
+    await update.message.reply_text(text)
+
+
 async def faq_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     faq = DATA.get("faq", [])
 
@@ -1697,12 +1715,42 @@ def should_answer_question(text):
         "кто нибудь знает",
         "где можно",
         "как можно",
+        "где найти",
+        "где купить",
+        "где взять",
+        "где заказать",
+        "где посмотреть",
+        "как найти",
+        "как купить",
+        "как заказать",
+        "как пополнить",
+        "как привязать",
+        "можно ли",
+        "к кому обратиться",
+        "у кого есть",
+        "кто может",
+        "кто подскажет",
+        "кто посоветует",
     }
+
+    words = set(norm.split())
+
+    request_verbs = {
+        "найти", "купить", "заказать", "снять", "арендовать",
+        "пополнить", "привязать", "оплатить", "перевести",
+        "отправить", "получить", "подключить", "посмотреть",
+        "искать", "посоветуйте", "порекомендуйте",
+    }
+
+    has_request_verb = bool(words & request_verbs)
+    has_question_word = bool(words & question_words)
+    has_question_phrase = any(phrase in norm for phrase in question_phrases)
 
     return (
         "?" in text
-        or any(word in norm.split() for word in question_words)
-        or any(phrase in norm for phrase in question_phrases)
+        or has_question_word
+        or has_question_phrase
+        or has_request_verb
     )
 
 
@@ -1774,11 +1822,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     question_like = should_answer_question(text)
 
+    if question_like:
+        STATS["questions_seen"] += 1
+
     # FAQ отвечаем/маршрутизируем только на сообщения,
     # которые действительно похожи на вопрос.
     # Обычная переписка с тематическими словами должна оставаться без ответа.
     # Это принципиальная защита от ложных срабатываний.
     if not question_like:
+        STATS["ignored"] += 1
         return
 
     if best_score < 8 or confidence < 0.38:
@@ -1834,6 +1886,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if best_score - second_score < 3 and confidence < 0.70:
             return
 
+    STATS["redirected"] += 1
     await redirect_to_admin(update, context, text)
 
 
@@ -1865,6 +1918,7 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("faq", faq_command))
     application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("contacts", contacts_command))
     application.add_handler(
         CommandHandler("announcements", announcements_command)
