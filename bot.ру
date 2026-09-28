@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DATA = {
     "settings": {
-        "version": "0.4",
+        "version": "0.5",
         "announcement_default_days": 3,
         "max_search_results": 5,
     },
@@ -516,15 +516,94 @@ CATEGORY_HINTS = {
 }
 
 
-CITIES = {
-    "гуанчжоу",
-    "фошань",
-    "шэньчжэнь",
-    "москва",
-    "санкт",
-    "петербург",
-    "шанхай",
+CITY_ALIASES = {
+    "гуанчжоу": {"гуанчжоу", "гуанчжоуе", "гуанчжоуй"},
+    "фошань": {"фошань", "фошане", "фошаня", "foshan"},
+    "шэньчжэнь": {"шэньчжэнь", "шэньчжэне", "шэньчжэня", "shenzhen"},
+    "москва": {"москва", "москве", "москву", "москвой", "moscow"},
+    "санкт петербург": {"санкт", "петербург", "спб", "питер"},
+    "шанхай": {"шанхай", "шанхае", "шанхая", "shanghai"},
 }
+
+CITIES = set(CITY_ALIASES.keys())
+
+CATEGORY_LABELS = {
+    "housing": "жильё",
+    "medicine": "медицина",
+    "cargo": "карго/доставка",
+    "translation": "переводчики",
+    "children": "дети/образование",
+    "pets": "животные",
+    "transport": "транспорт",
+    "beauty": "красота",
+    "shopping": "покупки",
+}
+
+# Сильные сервисные сущности. Они важнее общего города.
+SERVICE_HINTS = {
+    "стоматолог": {"стоматолог", "стоматология", "зубы", "зубной", "дантист"},
+    "врач": {"врач", "доктор", "клиника", "больница", "медицина"},
+    "переводчик": {"переводчик", "перевод", "сопровождение"},
+    "квартира": {"квартира", "жилье", "аренда", "комната", "апартаменты"},
+    "карго": {"карго", "груз", "доставка", "посылка", "перевозка"},
+    "авто": {"авто", "машина", "автомобиль", "прокат", "такси"},
+    "школа": {"школа", "детский", "садик", "образование"},
+    "ветеринар": {"ветеринар", "собака", "кошка", "кот", "животное"},
+    "маникюр": {"маникюр", "педикюр"},
+    "волосы": {"волосы", "парикмахер"},
+    "электроника": {"электроника", "телефон", "айфон", "наушники"},
+}
+
+
+# ============================================================
+# ENTITY EXTRACTION
+# ============================================================
+
+def extract_city(text):
+    norm = normalize(text)
+    words = set(norm.split())
+
+    for canonical, aliases in CITY_ALIASES.items():
+        if canonical in norm:
+            return canonical
+        if words & aliases:
+            return canonical
+
+    return None
+
+
+def extract_services(text):
+    query_tokens = tokens(text)
+    found = []
+
+    for service, hints in SERVICE_HINTS.items():
+        hits = query_tokens & hints
+        if hits:
+            found.append((service, len(hits)))
+
+    found.sort(key=lambda x: x[1], reverse=True)
+    return [service for service, _ in found]
+
+
+def extract_categories(text):
+    query_tokens = tokens(text)
+    found = []
+
+    for category, hints in CATEGORY_HINTS.items():
+        hits = query_tokens & hints
+        if hits:
+            found.append((category, len(hits)))
+
+    found.sort(key=lambda x: x[1], reverse=True)
+    return [category for category, _ in found]
+
+
+def extract_entities(text):
+    return {
+        "city": extract_city(text),
+        "services": extract_services(text),
+        "categories": extract_categories(text),
+    }
 
 
 # ============================================================
@@ -738,127 +817,105 @@ def score_faq(query, item):
     if not query_norm:
         return 0
 
-    score = 0
-
     question = item.get("question", "")
     answer = item.get("answer", "")
     keywords = item.get("keywords", [])
     category = item.get("category", "")
+    item_city = extract_city(
+        " ".join(
+            [
+                question,
+                answer,
+                " ".join(str(x) for x in keywords),
+            ]
+        )
+    )
 
-    question_norm = normalize(question)
-    answer_norm = normalize(answer)
+    item_entities = extract_entities(
+        " ".join(
+            [
+                question,
+                answer,
+                " ".join(str(x) for x in keywords),
+            ]
+        )
+    )
 
-    # --------------------------------------------------------
-    # 1. Сильный тематический сигнал
-    # --------------------------------------------------------
+    score = 0
 
-    category_terms = CATEGORY_HINTS.get(category, set())
-    category_hits = query_tokens & category_terms
+    # 1. Категория — сильный сигнал.
+    category_hits = query_tokens & CATEGORY_HINTS.get(category, set())
+    score += len(category_hits) * 18
 
-    # Каждый тематический термин сильно влияет на результат.
-    score += len(category_hits) * 15
+    # 2. Конкретная услуга — ещё сильнее.
+    query_services = extract_services(query)
+    item_services = item_entities["services"]
 
-    # --------------------------------------------------------
-    # 2. Ключевые слова
-    # --------------------------------------------------------
+    service_overlap = set(query_services) & set(item_services)
+    score += len(service_overlap) * 22
 
+    # 3. Ключевые слова.
     keyword_tokens = set()
 
     for keyword in keywords:
-        keyword_normalized = normalize(keyword)
-
-        if not keyword_normalized:
+        keyword_norm = normalize(keyword)
+        if not keyword_norm:
             continue
 
         keyword_token_set = tokens(keyword)
         keyword_tokens.update(keyword_token_set)
 
-        if keyword_normalized in query_norm:
+        if keyword_norm in query_norm:
             score += 5
 
     keyword_hits = query_tokens & keyword_tokens
     score += len(keyword_hits) * 4
 
-    # --------------------------------------------------------
-    # 3. Совпадение с формулировкой вопроса
-    # --------------------------------------------------------
-
+    # 4. Совпадение с формулировкой вопроса.
     question_tokens = tokens(question)
-    question_hits = query_tokens & question_tokens
+    score += len(query_tokens & question_tokens) * 3
 
-    score += len(question_hits) * 3
-
-    # --------------------------------------------------------
-    # 4. Семантическая похожесть формулировок
-    # --------------------------------------------------------
-
+    # 5. Общая похожесть текста.
     ratio = similarity(query, question)
 
-    if ratio >= 0.80:
-        score += 5
-    elif ratio >= 0.65:
-        score += 3
-    elif ratio >= 0.50:
-        score += 1
+    if ratio >= 0.82:
+        score += 6
+    elif ratio >= 0.70:
+        score += 4
+    elif ratio >= 0.55:
+        score += 2
 
-    # --------------------------------------------------------
-    # 5. Совпадение с ответом
-    # --------------------------------------------------------
-
-    answer_tokens = tokens(answer)
-    answer_hits = query_tokens & answer_tokens
-
+    # 6. Ответ тоже даёт небольшой сигнал.
+    answer_hits = query_tokens & tokens(answer)
     score += min(len(answer_hits), 2)
 
-    # --------------------------------------------------------
-    # 6. Город — только дополнительный сигнал
-    # --------------------------------------------------------
+    # 7. ГОРОД — теперь не просто бонус, а важный фильтр.
+    query_city = extract_city(query)
 
-    for city in CITIES:
-        if city in query_norm:
-            if city in question_norm:
-                score += 2
-            elif city in answer_norm:
-                score += 1
+    if query_city:
+        if item_city == query_city:
+            score += 20
+        elif item_city and item_city != query_city:
+            score -= 35
+        else:
+            # Вопрос содержит город, а карточка его явно не указывает.
+            score -= 8
 
-    # --------------------------------------------------------
-    # 7. Жёсткий штраф за конфликт тематики
-    # --------------------------------------------------------
-    #
-    # Если в запросе есть сильный термин одной темы,
-    # а FAQ относится к другой теме — снижаем результат.
-    #
-    # Например:
-    # "стоматолог Гуанчжоу"
-    #
-    # housing имеет только "Гуанчжоу", но medicine имеет
-    # "стоматолог". Поэтому жильё не должно побеждать.
-    # --------------------------------------------------------
+    # 8. Если пользователь явно назвал услугу,
+    # чужая категория получает сильный штраф.
+    query_categories = extract_categories(query)
 
-    all_category_hits = {}
+    if query_categories and category not in query_categories:
+        # Иногда есть пересечения вроде "аренда машины".
+        # Поэтому штраф умеренный, но заметный.
+        score -= 18
 
-    for cat, terms in CATEGORY_HINTS.items():
-        hits = query_tokens & terms
-        if hits:
-            all_category_hits[cat] = len(hits)
-
-    if all_category_hits:
-        strongest_category = max(
-            all_category_hits,
-            key=all_category_hits.get
-        )
-
-        if strongest_category != category:
-            strongest_hits = all_category_hits[strongest_category]
-
-            if strongest_hits >= 1:
-                score -= 12
-
-            if strongest_hits >= 2:
-                score -= 8
+    # 9. Если есть конкретная услуга, а карточка про неё не знает,
+    # не позволяем общему совпадению по городу/словам победить.
+    if query_services and not service_overlap:
+        score -= 10
 
     return score
-
 
 def find_faq(query):
     results = []
@@ -874,7 +931,55 @@ def find_faq(query):
 
     results.sort(key=lambda x: x[0], reverse=True)
 
-    return results
+    return results[:DATA["settings"].get("max_search_results", 5)]
+
+
+def faq_confidence(query, results):
+    if not results:
+        return 0.0
+
+    best_score = results[0][0]
+
+    if best_score <= 0:
+        return 0.0
+
+    # Нормализованная, намеренно консервативная оценка.
+    confidence = min(best_score / 55.0, 1.0)
+
+    if len(results) >= 2:
+        second_score = results[1][0]
+        if best_score - second_score < 5:
+            confidence *= 0.75
+
+    entities = extract_entities(query)
+
+    if entities["city"]:
+        item_text = " ".join(
+            [
+                results[0][1].get("question", ""),
+                results[0][1].get("answer", ""),
+                " ".join(str(x) for x in results[0][1].get("keywords", [])),
+            ]
+        )
+        if extract_city(item_text) == entities["city"]:
+            confidence = min(confidence + 0.15, 1.0)
+
+    if entities["services"]:
+        item_entities = extract_entities(
+            " ".join(
+                [
+                    results[0][1].get("question", ""),
+                    results[0][1].get("answer", ""),
+                    " ".join(
+                        str(x) for x in results[0][1].get("keywords", [])
+                    ),
+                ]
+            )
+        )
+        if set(entities["services"]) & set(item_entities["services"]):
+            confidence = min(confidence + 0.15, 1.0)
+
+    return confidence
 
 
 # ============================================================
@@ -901,6 +1006,20 @@ def score_contact(query, item):
 
     score = len(query_tokens & item_tokens) * 5
 
+    query_city = extract_city(query)
+    item_city = extract_city(searchable)
+
+    if query_city:
+        if item_city == query_city:
+            score += 20
+        elif item_city:
+            score -= 30
+
+    query_services = extract_services(query)
+    item_services = extract_services(searchable)
+
+    score += len(set(query_services) & set(item_services)) * 20
+
     category = normalize(item.get("category", ""))
 
     for cat, hints in CATEGORY_HINTS.items():
@@ -908,7 +1027,6 @@ def score_contact(query, item):
             score += len(query_tokens & hints) * 8
 
     return score
-
 
 def find_contacts(query):
     results = []
@@ -1095,7 +1213,7 @@ def format_announcement(item):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "👋 Я на связи!\n\n"
-        "Я тестовый помощник группы.\n"
+        "Я тестовый помощник группы v0.5.\n"
         "Могу искать информацию по базе группы.\n\n"
         "Команды:\n"
         "/help — помощь\n"
@@ -1117,6 +1235,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Кто знает карго из Китая в Москву?\n"
         "• Где найти переводчика в Гуанчжоу?\n\n"
         "Если информации в базе недостаточно, я стараюсь не придумывать ответ."
+    )
+
+    await update.message.reply_text(text)
+
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    faq_count = len(DATA.get("faq", []))
+    contacts_count = len(DATA.get("contacts", []))
+    active_announcements = sum(
+        1
+        for item in DATA.get("announcements", [])
+        if is_announcement_active(item)
+    )
+
+    text = (
+        "🧠 Состояние базы\n\n"
+        f"FAQ: {faq_count}\n"
+        f"Контакты: {contacts_count}\n"
+        f"Активные объявления: {active_announcements}\n"
+        f"Версия: {DATA['settings'].get('version', '?')}"
     )
 
     await update.message.reply_text(text)
@@ -1269,8 +1407,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
-    # Не вмешиваемся в обычный чат.
     intent = detect_intent(text)
+    entities = extract_entities(text)
 
     # --------------------------------------------------------
     # Актуальные объявления
@@ -1293,16 +1431,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if intent == "contact":
         contacts = find_contacts(text)
 
-        if contacts:
+        if contacts and contacts[0][0] >= 15:
+            # Если нашли уверенный реальный контакт — отдаём его.
             _, item = contacts[0]
             await update.message.reply_text(
                 "📇 Нашёл контакт:\n\n" + format_contact(item)
             )
             return
-
-        # Если контактов нет, не молчим, если есть подходящий FAQ.
-        # Например "нужен стоматолог" пока ищется в FAQ.
-        # Поэтому продолжаем ниже.
 
     # --------------------------------------------------------
     # FAQ / база знаний
@@ -1314,44 +1449,79 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     best_score, best_item = results[0]
+    confidence = faq_confidence(text, results)
 
     question_like = should_answer_question(text)
 
-    # Для вопроса нужен более низкий порог,
-    # для обычного сообщения — более высокий.
-    minimum_score = 5 if question_like else 10
-
-    if best_score < minimum_score:
-        return
-
-    # Если есть явный тематический термин,
-    # ответ должен быть достаточно уверенным.
-    query_tokens = tokens(text)
-
-    category_scores = {}
-
-    for category, hints in CATEGORY_HINTS.items():
-        hits = query_tokens & hints
-        if hits:
-            category_scores[category] = len(hits)
-
-    if category_scores:
-        strongest_category = max(
-            category_scores,
-            key=category_scores.get
-        )
-
-        if (
-            best_item.get("category") != strongest_category
-            and category_scores[strongest_category] >= 1
-        ):
-            # Не отдаём ответ из чужой категории.
+    # Консервативные пороги.
+    # Лучше промолчать, чем ответить не по теме.
+    if question_like:
+        if best_score < 8 or confidence < 0.38:
             return
+    else:
+        if best_score < 13 or confidence < 0.52:
+            return
+
+    # --------------------------------------------------------
+    # Дополнительная проверка сущностей
+    # --------------------------------------------------------
+
+    query_city = entities["city"]
+
+    if query_city:
+        item_text = " ".join(
+            [
+                best_item.get("question", ""),
+                best_item.get("answer", ""),
+                " ".join(
+                    str(x) for x in best_item.get("keywords", [])
+                ),
+            ]
+        )
+        item_city = extract_city(item_text)
+
+        # Если человек назвал конкретный город,
+        # не отвечаем карточкой другого города.
+        if item_city and item_city != query_city:
+            return
+
+    query_services = entities["services"]
+
+    if query_services:
+        item_text = " ".join(
+            [
+                best_item.get("question", ""),
+                best_item.get("answer", ""),
+                " ".join(
+                    str(x) for x in best_item.get("keywords", [])
+                ),
+            ]
+        )
+        item_services = extract_services(item_text)
+
+        # При наличии конкретной услуги карточка должна
+        # хотя бы тематически знать эту услугу.
+        if not set(query_services) & set(item_services):
+            # Для общих категорий допускаем fallback только
+            # если результат очень уверенный.
+            if confidence < 0.72:
+                return
 
     answer = best_item.get("answer", "").strip()
 
     if not answer:
         return
+
+    # --------------------------------------------------------
+    # Если два результата практически равны,
+    # не выдаём случайный ответ.
+    # --------------------------------------------------------
+
+    if len(results) >= 2:
+        second_score = results[1][0]
+
+        if best_score - second_score < 3 and confidence < 0.70:
+            return
 
     answer += format_source(best_item.get("source"))
 
@@ -1385,6 +1555,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("faq", faq_command))
+    application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("contacts", contacts_command))
     application.add_handler(
         CommandHandler("announcements", announcements_command)
