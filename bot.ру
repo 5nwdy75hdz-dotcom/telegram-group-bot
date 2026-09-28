@@ -1,12 +1,9 @@
-import os
 import json
 import logging
 import re
-import copy
-from pathlib import Path
-from datetime import datetime, timezone, timedelta
-
 from difflib import SequenceMatcher
+from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 from telegram import Update
 from telegram.ext import (
@@ -17,208 +14,216 @@ from telegram.ext import (
     filters,
 )
 
-
 # ============================================================
 # CONFIG
 # ============================================================
 
-TOKEN = os.getenv("BOT_TOKEN")
-
-if not TOKEN:
-    raise RuntimeError("Не найдена переменная BOT_TOKEN")
+BOT_TOKEN = __import__("os").getenv("BOT_TOKEN")
 
 DATA_FILE = Path("knowledge.json")
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     level=logging.INFO,
 )
-
 logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# DEFAULT DATA
+# DEFAULT KNOWLEDGE
 # ============================================================
 
 DEFAULT_DATA = {
     "settings": {
-        "version": "0.3",
+        "version": "0.4",
         "announcement_default_days": 3,
-        "max_search_results": 5
+        "max_search_results": 5,
     },
 
     "faq": [
         {
-            "id": "faq_001",
+            "id": "housing_guangzhou",
             "category": "housing",
-            "question": "Где искать квартиру в Гуанчжоу?",
+            "question": "Где искать жильё и квартиры в Гуанчжоу?",
             "keywords": [
                 "квартира",
                 "жилье",
+                "жильё",
                 "аренда",
                 "снять",
+                "съем",
+                "съём",
+                "апартаменты",
                 "Гуанчжоу",
-                "гуанчжоу"
             ],
             "answer": (
-                "Для поиска жилья в Китае в группе упоминались "
-                "58, Ziroom и Welcee. Также можно искать варианты "
-                "через местных риелторов и русскоязычные группы."
+                "Для поиска жилья в Гуанчжоу в группе упоминались "
+                "58, Ziroom и Welcee. Также можно уточнить район и бюджет — "
+                "по ним искать точнее."
             ),
             "source": {
                 "chat": "BezenvKitae",
                 "message_id": 3486,
-                "date": "2026-09-20"
-            }
+                "date": "2026-09-20",
+            },
         },
         {
-            "id": "faq_002",
+            "id": "housing_foshan",
             "category": "housing",
-            "question": "Где искать квартиру в Фошане?",
+            "question": "Где искать жильё в Фошане?",
             "keywords": [
                 "квартира",
                 "жилье",
+                "жильё",
                 "аренда",
+                "снять",
                 "Фошань",
-                "фошань",
-                "Foshan"
+                "Foshan",
+                "район",
+                "апартаменты",
             ],
             "answer": (
-                "В группе обсуждались районы Фошаня, стоимость жилья "
-                "и варианты рядом с метро. Если нужен конкретный район, "
-                "лучше указать бюджет и место работы."
+                "В обсуждении по Фошаню сравнивали районы и стоимость жилья. "
+                "Можно уточнить бюджет, район и необходимость близости к Гуанчжоу."
             ),
             "source": {
                 "chat": "BezenvKitae",
                 "message_id": 4017,
-                "date": "2026-09-20"
-            }
+                "date": "2026-09-20",
+            },
         },
         {
-            "id": "faq_003",
+            "id": "cargo_china_russia",
             "category": "cargo",
-            "question": "Карго из Китая в Россию",
+            "question": "Как отправить груз из Китая в Россию?",
             "keywords": [
                 "карго",
                 "груз",
                 "доставка",
+                "посылка",
+                "перевозка",
+                "отправка",
                 "Китай",
                 "Россия",
                 "Москва",
-                "Питер",
-                "Санкт-Петербург"
             ],
             "answer": (
-                "В группе регулярно публиковались контакты карго и "
-                "перевозчиков Китай → Россия. Для поиска конкретного "
-                "варианта лучше указать город отправления, город получения "
-                "и примерный вес."
+                "В группе обсуждались карго из Китая в Москву. "
+                "Есть старое упоминание тарифа от $5/кг, но цену и условия "
+                "нужно обязательно уточнять перед отправкой."
             ),
             "source": {
                 "chat": "BezenvKitae",
                 "message_id": 3717,
-                "date": "2026-09-20"
-            }
+                "date": "2026-09-20",
+            },
         },
         {
-            "id": "faq_004",
+            "id": "translation_guangzhou",
             "category": "translation",
-            "question": "Нужен переводчик в Гуанчжоу",
+            "question": "Где найти переводчика в Гуанчжоу?",
             "keywords": [
                 "переводчик",
                 "перевод",
                 "китайский",
-                "русский",
-                "гуанчжоу",
-                "сопровождение"
+                "сопровождение",
+                "язык",
+                "Гуанчжоу",
             ],
             "answer": (
-                "В группе были контакты русско-китайских переводчиков "
-                "в Гуанчжоу. Можно поискать подходящий контакт в разделе "
-                "контактов бота."
+                "В группе были контакты переводчиков в Гуанчжоу. "
+                "Можно уточнить, нужен ли устный перевод, сопровождение "
+                "или переводчик для бизнеса."
             ),
             "source": {
                 "chat": "BezenvKitae",
                 "message_id": 3566,
-                "date": "2026-09-20"
-            }
+                "date": "2026-09-20",
+            },
         },
         {
-            "id": "faq_005",
+            "id": "children_schools_guangzhou",
             "category": "children",
-            "question": "Русские школы в Гуанчжоу",
+            "question": "Какие есть русские школы и сады в Гуанчжоу?",
             "keywords": [
                 "школа",
+                "школы",
                 "русская школа",
                 "дети",
                 "ребенок",
-                "гуанчжоу",
-                "образование"
+                "ребёнок",
+                "детский сад",
+                "садик",
+                "образование",
+                "Гуанчжоу",
             ],
             "answer": (
-                "В группе обсуждались русские школы, районы проживания "
-                "семей и родительские группы. Если ищете школу, укажите "
-                "возраст ребенка и желаемый район."
+                "В группе обсуждались русские школы, семейные районы "
+                "и родительские группы в Гуанчжоу."
             ),
             "source": {
                 "chat": "BezenvKitae",
                 "message_id": 4024,
-                "date": "2026-09-20"
-            }
+                "date": "2026-09-20",
+            },
         },
         {
-            "id": "faq_006",
+            "id": "pets_dog_import",
             "category": "pets",
-            "question": "Как перевезти собаку в Китай?",
+            "question": "Как перевезти собаку из Китая?",
             "keywords": [
                 "собака",
+                "собаку",
                 "кот",
+                "кошка",
                 "животное",
                 "ветеринар",
                 "вакцина",
+                "карантин",
+                "перевезти",
+                "вывоз",
+                "импорт",
                 "Китай",
-                "перевозка"
             ],
             "answer": (
-                "В группе обсуждались вакцинация, анализ на антитела, "
-                "ветеринарные документы, государственная ветклиника "
-                "и карантин. Для актуальных требований необходимо "
-                "проверять действующие правила."
+                "В группе обсуждались вакцинация, сертификаты, карантин "
+                "и вывоз собак из Китая. Требования зависят от направления "
+                "и даты, поэтому перед поездкой их нужно проверять отдельно."
             ),
             "source": {
                 "chat": "BezenvKitae",
                 "message_id": 4215,
-                "date": "2026-09-20"
-            }
+                "date": "2026-09-20",
+            },
         },
         {
-            "id": "faq_007",
+            "id": "car_rental_guangzhou",
             "category": "transport",
-            "question": "Аренда автомобиля в Гуанчжоу",
+            "question": "Где арендовать автомобиль в Гуанчжоу?",
             "keywords": [
-                "машина",
                 "автомобиль",
-                "аренда",
-                "прокат",
+                "машина",
                 "авто",
-                "гуанчжоу"
+                "прокат",
+                "аренда",
+                "такси",
+                "Гуанчжоу",
             ],
             "answer": (
-                "В группе публиковались варианты аренды автомобилей "
-                "в Гуанчжоу. Для выбора подходящего варианта желательно "
-                "указать срок аренды и тип автомобиля."
+                "В группе спрашивали про аренду автомобиля в Гуанчжоу. "
+                "Если нужен конкретный вариант, лучше уточнить срок, "
+                "тип машины и нужен ли водитель."
             ),
             "source": {
                 "chat": "BezenvKitae",
                 "message_id": 3477,
-                "date": "2026-09-20"
-            }
+                "date": "2026-09-20",
+            },
         },
         {
-            "id": "faq_008",
+            "id": "beauty_guangzhou",
             "category": "beauty",
-            "question": "Русскоязычные мастера в Гуанчжоу",
+            "question": "Где найти русскоязычного мастера красоты в Гуанчжоу?",
             "keywords": [
                 "маникюр",
                 "педикюр",
@@ -227,45 +232,52 @@ DEFAULT_DATA = {
                 "ресницы",
                 "салон",
                 "мастер",
+                "косметолог",
                 "русский",
-                "гуанчжоу"
+                "русскоязычный",
+                "Гуанчжоу",
             ],
             "answer": (
-                "В группе были контакты русскоязычных мастеров "
-                "и салонов в Гуанчжоу, включая мастеров в районе Wuyangcun."
+                "В группе были контакты русскоязычных мастеров и салонов "
+                "в Гуанчжоу. Можно уточнить нужную услугу."
             ),
             "source": {
                 "chat": "BezenvKitae",
                 "message_id": 4083,
-                "date": "2026-09-20"
-            }
+                "date": "2026-09-20",
+            },
         },
         {
-            "id": "faq_009",
+            "id": "medicine_guangzhou",
             "category": "medicine",
-            "question": "Русскоязычный врач или стоматолог",
+            "question": "Где найти русскоговорящего врача или стоматолога в Гуанчжоу?",
             "keywords": [
                 "врач",
-                "стоматолог",
-                "зубы",
-                "больница",
-                "клиника",
                 "доктор",
+                "стоматолог",
+                "стоматология",
+                "зубы",
+                "зубной",
+                "клиника",
+                "больница",
+                "медицина",
                 "русский",
-                "английский"
+                "английский",
+                "Гуанчжоу",
             ],
             "answer": (
-                "В группе публиковались контакты русско- и "
-                "англоязычных стоматологов и медицинских специалистов."
+                "В группе были рекомендации русско- и англоязычных "
+                "стоматологов и врачей в Гуанчжоу. "
+                "Можно уточнить нужного специалиста."
             ),
             "source": {
                 "chat": "BezenvKitae",
                 "message_id": 4338,
-                "date": "2026-09-20"
-            }
+                "date": "2026-09-20",
+            },
         },
         {
-            "id": "faq_010",
+            "id": "electronics_shenzhen",
             "category": "shopping",
             "question": "Где покупать электронику в Шэньчжэне?",
             "keywords": [
@@ -273,186 +285,109 @@ DEFAULT_DATA = {
                 "телефон",
                 "айфон",
                 "наушники",
-                "игровая приставка",
+                "рынок",
+                "покупка",
+                "товар",
                 "Шэньчжэнь",
-                "рынок"
+                "Шэньчжене",
+                "Shenzhen",
             ],
             "answer": (
-                "В группе обсуждались электронные рынки Шэньчжэня, "
-                "где можно искать телефоны, аксессуары, игровые устройства "
-                "и другую электронику."
+                "В группе обсуждались рынки электроники в Шэньчжэне. "
+                "Можно уточнить, что именно нужно купить."
             ),
             "source": {
                 "chat": "BezenvKitae",
                 "message_id": 3497,
-                "date": "2026-09-20"
-            }
-        }
+                "date": "2026-09-20",
+            },
+        },
     ],
 
     "contacts": [],
-
     "announcements": [],
-
-    "rules": []
+    "rules": [],
 }
 
 
 # ============================================================
-# DATA MANAGEMENT
-# ============================================================
-
-def save_data(data):
-    temp_file = DATA_FILE.with_suffix(".tmp")
-
-    with open(temp_file, "w", encoding="utf-8") as file:
-        json.dump(
-            data,
-            file,
-            ensure_ascii=False,
-            indent=2
-        )
-
-    temp_file.replace(DATA_FILE)
-
-
-def merge_defaults(data):
-    """
-    Добавляет отсутствующие разделы и стандартные FAQ,
-    не уничтожая пользовательские данные.
-    """
-
-    changed = False
-
-    if not isinstance(data, dict):
-        data = copy.deepcopy(DEFAULT_DATA)
-        save_data(data)
-        return data
-
-    # Разделы верхнего уровня
-    for section in [
-        "settings",
-        "faq",
-        "contacts",
-        "announcements",
-        "rules"
-    ]:
-        if section not in data:
-            data[section] = copy.deepcopy(DEFAULT_DATA[section])
-            changed = True
-
-    # Настройки
-    for key, value in DEFAULT_DATA["settings"].items():
-        if key not in data["settings"]:
-            data["settings"][key] = value
-            changed = True
-
-    # Добавляем стандартные FAQ только по отсутствующему ID
-    existing_ids = {
-        item.get("id")
-        for item in data["faq"]
-        if isinstance(item, dict)
-    }
-
-    for default_faq in DEFAULT_DATA["faq"]:
-        if default_faq["id"] not in existing_ids:
-            data["faq"].append(copy.deepcopy(default_faq))
-            changed = True
-
-    if changed:
-        save_data(data)
-
-    return data
-
-
-def load_data():
-    if not DATA_FILE.exists():
-        data = copy.deepcopy(DEFAULT_DATA)
-        save_data(data)
-        return data
-
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as file:
-            data = json.load(file)
-
-        return merge_defaults(data)
-
-    except Exception as error:
-        logger.error("Ошибка чтения knowledge.json: %s", error)
-
-        backup_file = DATA_FILE.with_suffix(".broken.json")
-
-        try:
-            DATA_FILE.rename(backup_file)
-        except Exception:
-            pass
-
-        data = copy.deepcopy(DEFAULT_DATA)
-        save_data(data)
-
-        return data
-
-
-DATA = load_data()
-
-
-# ============================================================
-# TEXT PROCESSING
+# NORMALIZATION
 # ============================================================
 
 WORD_REPLACEMENTS = {
+    "жилье": "жилье",
+    "жильё": "жилье",
     "квартиру": "квартира",
     "квартиры": "квартира",
     "квартире": "квартира",
-    "квартир": "квартира",
-
-    "жилье": "жилье",
-    "жилья": "жилье",
-
-    "снять": "аренда",
-    "сниму": "аренда",
-    "снимаю": "аренда",
-    "арендовать": "аренда",
+    "квартирой": "квартира",
+    "аренды": "аренда",
     "аренду": "аренда",
+    "снять": "аренда",
+    "снимаю": "аренда",
+    "сниму": "аренда",
+    "съём": "аренда",
+    "съем": "аренда",
+
+    "стоматолога": "стоматолог",
+    "стоматологи": "стоматолог",
+    "стоматологом": "стоматолог",
+    "стоматологии": "стоматология",
+    "стоматологию": "стоматология",
+    "зубной": "стоматолог",
+    "зубного": "стоматолог",
+    "зубному": "стоматолог",
+    "зубным": "стоматолог",
+    "дантист": "стоматолог",
+    "дантиста": "стоматолог",
+
+    "русскоговорящий": "русский",
+    "русскоговорящая": "русский",
+    "русскоговорящие": "русский",
+    "русскоговорящего": "русский",
+    "русскоязычный": "русский",
+    "русскоязычная": "русский",
+    "русскоязычные": "русский",
+    "русскоязычного": "русский",
 
     "переводчика": "переводчик",
     "переводчики": "переводчик",
     "переводчиком": "переводчик",
 
     "врача": "врач",
-    "доктора": "врач",
-    "доктор": "врач",
+    "врачу": "врач",
+    "врачом": "врач",
+    "доктора": "доктор",
+    "доктору": "доктор",
+    "доктором": "доктор",
 
-    "машину": "автомобиль",
-    "машина": "автомобиль",
-    "авто": "автомобиль",
+    "машину": "машина",
+    "машины": "машина",
+    "автомобиль": "авто",
+    "автомобиля": "авто",
+    "автомобиле": "авто",
 
-    "ребенка": "ребенок",
     "детей": "ребенок",
+    "ребёнка": "ребенок",
+    "ребенка": "ребенок",
+    "детский": "дети",
+    "школы": "школа",
+    "школу": "школа",
 
-    "карго": "карго",
-    "груз": "карго",
-    "доставку": "карго",
-    "доставка": "карго",
+    "посылку": "посылка",
+    "посылки": "посылка",
+    "груза": "груз",
+    "грузом": "груз",
+    "доставку": "доставка",
 
+    "фошане": "фошань",
+    "фошаня": "фошань",
     "гуанчжоу": "гуанчжоу",
-    "guangzhou": "гуанчжоу",
-
-    "фошань": "фошань",
-    "foshan": "фошань",
-
-    "шэньчжэнь": "шэньчжэнь",
-    "шенчжень": "шэньчжэнь",
-    "shenzhen": "шэньчжэнь",
-
+    "шэньчжэне": "шэньчжэнь",
+    "шэньчжэня": "шэньчжэнь",
     "москву": "москва",
-    "москва": "москва",
-
-    "питер": "санкт петербург",
-    "петербург": "санкт петербург",
-    "спб": "санкт петербург",
+    "москве": "москва",
 }
-
 
 STOP_WORDS = {
     "а",
@@ -462,75 +397,260 @@ STOP_WORDS = {
     "да",
     "же",
     "ли",
+    "ну",
+    "вот",
+    "я",
+    "мы",
+    "вы",
+    "они",
     "мне",
+    "могу",
+    "можно",
     "нужен",
     "нужна",
     "нужно",
     "нужны",
+    "хочу",
+    "хотел",
+    "хотела",
     "кто",
-    "кто-нибудь",
-    "ктонибудь",
-    "подскажите",
-    "подскажите",
-    "знает",
-    "знаете",
-    "есть",
-    "можно",
+    "что",
     "где",
     "как",
-    "что",
-    "бы",
+    "есть",
+    "подскажите",
+    "посоветуйте",
+    "кто-нибудь",
+    "ктонибудь",
+    "знает",
+    "знаете",
+    "скажите",
     "пожалуйста",
-    "кто-то",
-    "кто-то",
+    "добрый",
+    "день",
+    "вечер",
+    "утро",
 }
 
 
+# Сильные тематические признаки.
+# Они специально весят больше города, чтобы
+# "стоматолог в Гуанчжоу" не превращался в "квартира в Гуанчжоу".
+CATEGORY_HINTS = {
+    "housing": {
+        "квартира",
+        "жилье",
+        "аренда",
+        "дом",
+        "комната",
+        "риелтор",
+        "район",
+        "апартаменты",
+    },
+    "medicine": {
+        "врач",
+        "стоматолог",
+        "стоматология",
+        "клиника",
+        "больница",
+        "доктор",
+        "зубы",
+        "медицина",
+    },
+    "cargo": {
+        "карго",
+        "груз",
+        "доставка",
+        "посылка",
+        "перевозка",
+        "отправка",
+    },
+    "translation": {
+        "переводчик",
+        "перевод",
+        "сопровождение",
+        "язык",
+    },
+    "children": {
+        "школа",
+        "дети",
+        "ребенок",
+        "детский",
+        "садик",
+        "образование",
+    },
+    "pets": {
+        "собака",
+        "кот",
+        "кошка",
+        "животное",
+        "ветеринар",
+        "вакцина",
+        "карантин",
+    },
+    "transport": {
+        "авто",
+        "машина",
+        "прокат",
+        "такси",
+    },
+    "beauty": {
+        "маникюр",
+        "педикюр",
+        "волосы",
+        "парикмахер",
+        "ресницы",
+        "салон",
+        "мастер",
+        "косметолог",
+    },
+    "shopping": {
+        "электроника",
+        "телефон",
+        "айфон",
+        "наушники",
+        "рынок",
+        "покупка",
+        "товар",
+    },
+}
+
+
+CITIES = {
+    "гуанчжоу",
+    "фошань",
+    "шэньчжэнь",
+    "москва",
+    "санкт",
+    "петербург",
+    "шанхай",
+}
+
+
+# ============================================================
+# DATA
+# ============================================================
+
+def merge_defaults(data):
+    if not isinstance(data, dict):
+        data = {}
+
+    if not isinstance(data.get("settings"), dict):
+        data["settings"] = {}
+
+    for key, value in DEFAULT_DATA["settings"].items():
+        data["settings"].setdefault(key, value)
+
+    if not isinstance(data.get("faq"), list):
+        data["faq"] = []
+
+    existing_ids = {
+        item.get("id")
+        for item in data["faq"]
+        if isinstance(item, dict)
+    }
+
+    for item in DEFAULT_DATA["faq"]:
+        if item["id"] not in existing_ids:
+            data["faq"].append(item.copy())
+
+    if not isinstance(data.get("contacts"), list):
+        data["contacts"] = []
+
+    if not isinstance(data.get("announcements"), list):
+        data["announcements"] = []
+
+    if not isinstance(data.get("rules"), list):
+        data["rules"] = []
+
+    return data
+
+
+def load_data():
+    if not DATA_FILE.exists():
+        data = merge_defaults({})
+        save_data(data)
+        return data
+
+    try:
+        with DATA_FILE.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        data = merge_defaults(data)
+        save_data(data)
+        return data
+
+    except Exception:
+        logger.exception("Ошибка чтения knowledge.json")
+        data = merge_defaults({})
+        save_data(data)
+        return data
+
+
+def save_data(data):
+    try:
+        with DATA_FILE.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        logger.exception("Ошибка записи knowledge.json")
+
+
+DATA = load_data()
+
+
+# ============================================================
+# TEXT HELPERS
+# ============================================================
+
 def normalize(text):
-    text = text.lower().strip()
+    if not text:
+        return ""
 
-    text = text.replace("ё", "е")
+    text = text.lower().replace("ё", "е")
 
-    # Убираем Telegram username и ссылки
+    # Убираем username и ссылки.
     text = re.sub(r"@\w+", " ", text)
     text = re.sub(r"https?://\S+", " ", text)
 
-    # Оставляем буквы, цифры и пробелы
+    # Пунктуация -> пробел.
     text = re.sub(r"[^a-zа-я0-9\s-]", " ", text)
 
     words = text.split()
-
-    normalized = []
+    result = []
 
     for word in words:
-        replacement = WORD_REPLACEMENTS.get(word, word)
+        word = WORD_REPLACEMENTS.get(word, word)
 
-        if replacement not in STOP_WORDS:
-            normalized.append(replacement)
+        if word in STOP_WORDS:
+            continue
 
-    return " ".join(normalized)
+        result.append(word)
+
+    return " ".join(result)
 
 
 def tokens(text):
     normalized = normalize(text)
-
-    return {
-        word
-        for word in normalized.split()
-        if len(word) >= 2
-    }
+    return set(normalized.split()) if normalized else set()
 
 
 def similarity(a, b):
-    return SequenceMatcher(
-        None,
-        normalize(a),
-        normalize(b)
-    ).ratio()
+    a = normalize(a)
+    b = normalize(b)
+
+    if not a or not b:
+        return 0.0
+
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def contains_phrase(query_norm, phrase):
+    phrase_norm = normalize(phrase)
+    return bool(phrase_norm and phrase_norm in query_norm)
 
 
 # ============================================================
-# INTENT DETECTION
+# INTENT
 # ============================================================
 
 CONTACT_WORDS = {
@@ -538,73 +658,73 @@ CONTACT_WORDS = {
     "контакты",
     "номер",
     "телефон",
+    "телефона",
     "мастер",
-    "специалист",
-    "переводчик",
     "врач",
+    "доктор",
+    "стоматолог",
+    "переводчик",
     "риелтор",
     "агент",
-    "карго",
-    "посредник",
-    "кто",
-    "человек",
+    "водитель",
+    "репетитор",
+    "ветеринар",
 }
 
 ANNOUNCEMENT_WORDS = {
-    "завтра",
     "сегодня",
-    "послезавтра",
-    "летит",
-    "лечу",
-    "лететь",
-    "едет",
+    "завтра",
+    "сейчас",
+    "срочно",
+    "актуально",
     "еду",
-    "может взять",
-    "могу взять",
-    "возьму",
-    "нужно передать",
-    "передать",
-    "передача",
-    "кто летит",
-    "кто едет",
+    "летим",
+    "лечу",
+    "вылетаю",
+    "вылет",
+    "ищу",
+    "есть место",
+    "есть места",
+    "свободно",
+    "нужен пассажир",
+    "пассажир",
 }
 
 
 def detect_intent(text):
-    normalized = normalize(text)
-    word_set = set(normalized.split())
+    norm = normalize(text)
 
-    announcement_score = 0
-    contact_score = 0
+    if not norm:
+        return "other"
 
-    for phrase in ANNOUNCEMENT_WORDS:
-        if phrase in normalized:
-            announcement_score += 3
+    if "?" in text:
+        if any(word in norm.split() for word in CONTACT_WORDS):
+            return "contact"
 
-    for word in CONTACT_WORDS:
-        if word in word_set:
-            contact_score += 1
-
-    # Явный вопрос про ближайшую поездку/передачу
-    if any(
-        phrase in normalized
-        for phrase in [
-            "кто летит",
-            "кто едет",
-            "кто может взять",
-            "нужно передать",
-            "могу взять"
-        ]
-    ):
-        return "announcement"
-
-    if announcement_score >= 3:
-        return "announcement"
-
-    if contact_score >= 1:
+    if any(word in norm.split() for word in CONTACT_WORDS):
         return "contact"
 
-    return "faq"
+    if any(phrase in norm for phrase in ANNOUNCEMENT_WORDS):
+        return "announcement"
+
+    # Явные вопросы.
+    question_words = {
+        "где",
+        "как",
+        "кто",
+        "сколько",
+        "можно",
+        "нужен",
+        "нужна",
+        "нужны",
+        "подскажите",
+        "посоветуйте",
+    }
+
+    if "?" in text or any(word in norm.split() for word in question_words):
+        return "question"
+
+    return "other"
 
 
 # ============================================================
@@ -615,56 +735,132 @@ def score_faq(query, item):
     query_norm = normalize(query)
     query_tokens = tokens(query)
 
+    if not query_norm:
+        return 0
+
     score = 0
 
     question = item.get("question", "")
     answer = item.get("answer", "")
     keywords = item.get("keywords", [])
+    category = item.get("category", "")
 
     question_norm = normalize(question)
     answer_norm = normalize(answer)
 
-    # Совпадение всей фразы
-    if question_norm and question_norm in query_norm:
-        score += 10
+    # --------------------------------------------------------
+    # 1. Сильный тематический сигнал
+    # --------------------------------------------------------
 
-    # Похожие вопросы
-    ratio = similarity(query, question)
+    category_terms = CATEGORY_HINTS.get(category, set())
+    category_hits = query_tokens & category_terms
 
-    if ratio >= 0.75:
-        score += 8
-    elif ratio >= 0.60:
-        score += 5
-    elif ratio >= 0.45:
-        score += 2
+    # Каждый тематический термин сильно влияет на результат.
+    score += len(category_hits) * 15
 
-    # Ключевые слова
+    # --------------------------------------------------------
+    # 2. Ключевые слова
+    # --------------------------------------------------------
+
     keyword_tokens = set()
 
     for keyword in keywords:
-        keyword_tokens.update(tokens(keyword))
+        keyword_normalized = normalize(keyword)
 
-        if normalize(keyword) in query_norm:
-            score += 4
+        if not keyword_normalized:
+            continue
 
-    # Пересечение слов
-    score += len(query_tokens & keyword_tokens) * 3
+        keyword_token_set = tokens(keyword)
+        keyword_tokens.update(keyword_token_set)
 
-    # Совпадения с самим вопросом
+        if keyword_normalized in query_norm:
+            score += 5
+
+    keyword_hits = query_tokens & keyword_tokens
+    score += len(keyword_hits) * 4
+
+    # --------------------------------------------------------
+    # 3. Совпадение с формулировкой вопроса
+    # --------------------------------------------------------
+
     question_tokens = tokens(question)
-    score += len(query_tokens & question_tokens) * 2
+    question_hits = query_tokens & question_tokens
 
-    # Немного учитываем ответ
+    score += len(question_hits) * 3
+
+    # --------------------------------------------------------
+    # 4. Семантическая похожесть формулировок
+    # --------------------------------------------------------
+
+    ratio = similarity(query, question)
+
+    if ratio >= 0.80:
+        score += 5
+    elif ratio >= 0.65:
+        score += 3
+    elif ratio >= 0.50:
+        score += 1
+
+    # --------------------------------------------------------
+    # 5. Совпадение с ответом
+    # --------------------------------------------------------
+
     answer_tokens = tokens(answer)
-    score += min(
-        len(query_tokens & answer_tokens),
-        3
-    )
+    answer_hits = query_tokens & answer_tokens
+
+    score += min(len(answer_hits), 2)
+
+    # --------------------------------------------------------
+    # 6. Город — только дополнительный сигнал
+    # --------------------------------------------------------
+
+    for city in CITIES:
+        if city in query_norm:
+            if city in question_norm:
+                score += 2
+            elif city in answer_norm:
+                score += 1
+
+    # --------------------------------------------------------
+    # 7. Жёсткий штраф за конфликт тематики
+    # --------------------------------------------------------
+    #
+    # Если в запросе есть сильный термин одной темы,
+    # а FAQ относится к другой теме — снижаем результат.
+    #
+    # Например:
+    # "стоматолог Гуанчжоу"
+    #
+    # housing имеет только "Гуанчжоу", но medicine имеет
+    # "стоматолог". Поэтому жильё не должно побеждать.
+    # --------------------------------------------------------
+
+    all_category_hits = {}
+
+    for cat, terms in CATEGORY_HINTS.items():
+        hits = query_tokens & terms
+        if hits:
+            all_category_hits[cat] = len(hits)
+
+    if all_category_hits:
+        strongest_category = max(
+            all_category_hits,
+            key=all_category_hits.get
+        )
+
+        if strongest_category != category:
+            strongest_hits = all_category_hits[strongest_category]
+
+            if strongest_hits >= 1:
+                score -= 12
+
+            if strongest_hits >= 2:
+                score -= 8
 
     return score
 
 
-def find_faq(query, minimum_score=4):
+def find_faq(query):
     results = []
 
     for item in DATA.get("faq", []):
@@ -673,15 +869,12 @@ def find_faq(query, minimum_score=4):
 
         score = score_faq(query, item)
 
-        if score >= minimum_score:
+        if score > 0:
             results.append((score, item))
 
-    results.sort(
-        key=lambda x: x[0],
-        reverse=True
-    )
+    results.sort(key=lambda x: x[0], reverse=True)
 
-    return results[:DATA["settings"]["max_search_results"]]
+    return results
 
 
 # ============================================================
@@ -689,44 +882,30 @@ def find_faq(query, minimum_score=4):
 # ============================================================
 
 def score_contact(query, item):
-    query_norm = normalize(query)
     query_tokens = tokens(query)
 
-    score = 0
+    if not query_tokens:
+        return 0
 
-    category = item.get("category", "")
-    city = item.get("city", "")
-    name = item.get("name", "")
-    description = item.get("description", "")
-    services = item.get("services", [])
+    text_parts = [
+        item.get("name", ""),
+        item.get("category", ""),
+        item.get("service", ""),
+        item.get("city", ""),
+        item.get("contact", ""),
+        item.get("comment", ""),
+    ]
 
-    searchable = " ".join(
-        [
-            str(category),
-            str(city),
-            str(name),
-            str(description),
-            " ".join(str(x) for x in services)
-        ]
-    )
+    searchable = " ".join(text_parts)
+    item_tokens = tokens(searchable)
 
-    searchable_tokens = tokens(searchable)
+    score = len(query_tokens & item_tokens) * 5
 
-    # Совпадение города
-    if city and normalize(city) in query_norm:
-        score += 7
+    category = normalize(item.get("category", ""))
 
-    # Совпадение категории
-    if category and normalize(category) in query_norm:
-        score += 5
-
-    # Слова услуг
-    for service in services:
-        if normalize(str(service)) in query_norm:
-            score += 4
-
-    # Общие совпадения
-    score += len(query_tokens & searchable_tokens) * 2
+    for cat, hints in CATEGORY_HINTS.items():
+        if category == cat:
+            score += len(query_tokens & hints) * 8
 
     return score
 
@@ -740,128 +919,96 @@ def find_contacts(query):
 
         score = score_contact(query, item)
 
-        if score >= 3:
+        if score > 0:
             results.append((score, item))
 
-    results.sort(
-        key=lambda x: x[0],
-        reverse=True
-    )
+    results.sort(key=lambda x: x[0], reverse=True)
 
-    return results[:DATA["settings"]["max_search_results"]]
+    return results[:DATA["settings"].get("max_search_results", 5)]
 
 
 # ============================================================
-# ANNOUNCEMENT SEARCH
+# ANNOUNCEMENTS
 # ============================================================
 
-def parse_datetime(value):
+def parse_date(value):
     if not value:
         return None
 
     try:
-        return datetime.fromisoformat(
-            value.replace("Z", "+00:00")
+        return datetime.strptime(value, "%Y-%m-%d").replace(
+            tzinfo=timezone.utc
         )
     except Exception:
         return None
 
 
 def is_announcement_active(item):
-    expires_at = parse_datetime(
-        item.get("expires_at")
-    )
+    if not isinstance(item, dict):
+        return False
 
-    if not expires_at:
-        return True
+    if item.get("active") is False:
+        return False
 
-    now = datetime.now(timezone.utc)
+    expires_at = parse_date(item.get("expires_at"))
 
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(
-            tzinfo=timezone.utc
+    if expires_at:
+        return datetime.now(timezone.utc) <= expires_at
+
+    created_at = parse_date(item.get("date"))
+
+    if created_at:
+        days = DATA["settings"].get("announcement_default_days", 3)
+        return datetime.now(timezone.utc) <= (
+            created_at + timedelta(days=days)
         )
 
-    return expires_at > now
+    return True
 
 
 def score_announcement(query, item):
-    query_tokens = tokens(query)
-
-    text = " ".join(
+    searchable = " ".join(
         [
-            str(item.get("text", "")),
-            str(item.get("category", "")),
-            str(item.get("contact", "")),
-            str(item.get("route", {}).get("from", "")),
-            str(item.get("route", {}).get("to", "")),
+            item.get("title", ""),
+            item.get("text", ""),
+            item.get("category", ""),
+            item.get("city", ""),
         ]
     )
 
-    item_tokens = tokens(text)
-
-    score = len(query_tokens & item_tokens) * 3
-
-    route = item.get("route", {})
-
-    query_norm = normalize(query)
-
-    route_from = normalize(
-        str(route.get("from", ""))
-    )
-
-    route_to = normalize(
-        str(route.get("to", ""))
-    )
-
-    if route_from and route_from in query_norm:
-        score += 5
-
-    if route_to and route_to in query_norm:
-        score += 5
-
-    return score
+    return len(tokens(query) & tokens(searchable)) * 5
 
 
 def find_announcements(query):
     results = []
 
     for item in DATA.get("announcements", []):
-        if not isinstance(item, dict):
-            continue
-
         if not is_announcement_active(item):
             continue
 
-        score = score_announcement(
-            query,
-            item
-        )
+        score = score_announcement(query, item)
 
-        if score >= 3:
+        if score > 0:
             results.append((score, item))
 
-    results.sort(
-        key=lambda x: x[0],
-        reverse=True
-    )
+    results.sort(key=lambda x: x[0], reverse=True)
 
-    return results[:DATA["settings"]["max_search_results"]]
+    return results[:DATA["settings"].get("max_search_results", 5)]
 
 
 # ============================================================
-# SOURCE FORMATTING
+# FORMATTERS
 # ============================================================
 
 def format_source(source):
-    if not source:
+    if not isinstance(source, dict):
         return ""
 
-    chat = source.get("chat")
-    message_id = source.get("message_id")
-    date = source.get("date")
-
     parts = []
+
+    chat = source.get("chat")
+    date = source.get("date")
+    message_id = source.get("message_id")
 
     if chat:
         parts.append(f"📍 {chat}")
@@ -878,552 +1025,209 @@ def format_source(source):
     return "\n\n" + " · ".join(parts)
 
 
-# ============================================================
-# CONTACT RESPONSE
-# ============================================================
-
 def format_contact(item):
-    name = item.get("name") or "Контакт"
+    parts = []
 
-    lines = [
-        f"👤 {name}"
-    ]
-
+    name = item.get("name")
+    service = item.get("service")
     city = item.get("city")
+    contact = item.get("contact")
+    comment = item.get("comment")
+
+    if name:
+        parts.append(f"👤 {name}")
+
+    if service:
+        parts.append(f"🔧 {service}")
 
     if city:
-        lines.append(f"📍 {city}")
-
-    services = item.get("services", [])
-
-    if services:
-        lines.append(
-            "🛠 " + ", ".join(
-                str(x) for x in services
-            )
-        )
-
-    description = item.get("description")
-
-    if description:
-        lines.append(
-            f"ℹ️ {description}"
-        )
-
-    contact = item.get("contact")
+        parts.append(f"📍 {city}")
 
     if contact:
-        lines.append(
-            f"📞 {contact}"
-        )
+        parts.append(f"📞 {contact}")
 
-    if item.get("verified"):
-        verified_date = item.get(
-            "verified_date"
-        )
+    if comment:
+        parts.append(f"💬 {comment}")
 
-        if verified_date:
-            lines.append(
-                f"✅ Проверено: {verified_date}"
-            )
-        else:
-            lines.append(
-                "✅ Контакт отмечен как проверенный"
-            )
+    source = item.get("source")
 
-    source = format_source(
-        item.get("source")
-    )
+    result = "\n".join(parts)
 
     if source:
-        lines.append(source)
+        result += format_source(source)
 
-    return "\n".join(lines)
+    return result
 
-
-# ============================================================
-# ANNOUNCEMENT RESPONSE
-# ============================================================
 
 def format_announcement(item):
-    lines = [
-        "📢 Актуальное объявление"
-    ]
-
-    text = item.get("text")
-
-    if text:
-        lines.append(
-            f"\n{text}"
-        )
-
-    route = item.get("route", {})
-
-    route_from = route.get("from")
-    route_to = route.get("to")
-
-    if route_from or route_to:
-        lines.append(
-            f"\n🛫 Маршрут: "
-            f"{route_from or '?'} → {route_to or '?'}"
-        )
-
-    contact = item.get("contact")
-
-    if contact:
-        lines.append(
-            f"📞 {contact}"
-        )
-
+    title = item.get("title", "Актуальное объявление")
+    text = item.get("text", "")
+    city = item.get("city")
+    date = item.get("date")
     expires_at = item.get("expires_at")
 
-    if expires_at:
-        lines.append(
-            f"⏳ Актуально до: {expires_at}"
-        )
+    result = f"📢 {title}\n"
 
-    source = format_source(
-        item.get("source")
-    )
+    if city:
+        result += f"📍 {city}\n"
+
+    if date:
+        result += f"📅 {date}\n"
+
+    if expires_at:
+        result += f"⏳ до {expires_at}\n"
+
+    if text:
+        result += f"\n{text}"
+
+    source = item.get("source")
 
     if source:
-        lines.append(source)
+        result += format_source(source)
 
-    return "\n".join(lines)
-
-
-# ============================================================
-# ADMIN
-# ============================================================
-
-async def is_admin(update: Update, context):
-    if not update.effective_chat:
-        return False
-
-    if not update.effective_user:
-        return False
-
-    try:
-        member = await context.bot.get_chat_member(
-            update.effective_chat.id,
-            update.effective_user.id
-        )
-
-        return member.status in {
-            "administrator",
-            "creator"
-        }
-
-    except Exception as error:
-        logger.warning(
-            "Не удалось проверить администратора: %s",
-            error
-        )
-
-        return False
+    return result
 
 
 # ============================================================
 # COMMANDS
 # ============================================================
 
-async def start(update: Update, context):
-    await update.message.reply_text(
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
         "👋 Я на связи!\n\n"
         "Я тестовый помощник группы.\n"
-        "Умею искать информацию в базе FAQ, "
-        "а дальше научусь работать с контактами "
-        "и актуальными объявлениями.\n\n"
+        "Могу искать информацию по базе группы.\n\n"
         "Команды:\n"
         "/help — помощь\n"
-        "/faq — список FAQ\n"
-        "/contacts — поиск контактов\n"
+        "/faq — что я сейчас знаю\n"
+        "/contacts — контакты\n"
         "/announcements — актуальные объявления"
     )
 
+    await update.message.reply_text(text)
 
-async def help_command(update: Update, context):
-    await update.message.reply_text(
-        "🤖 Команды бота:\n\n"
 
-        "/start — запустить бота\n"
-        "/help — эта справка\n"
-        "/faq — показать FAQ\n"
-        "/contacts — показать контакты\n"
-        "/announcements — показать актуальные объявления\n\n"
-
-        "Администраторам:\n"
-        "/addfaq\n"
-        "/delfaq\n"
-        "/listfaq\n"
-        "/addcontact\n"
-        "/delcontact\n"
-        "/listcontacts\n"
-        "/addannouncement\n"
-        "/delannouncement\n"
-        "/listannouncements"
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "🤖 Как мной пользоваться:\n\n"
+        "Просто задай вопрос обычным сообщением.\n\n"
+        "Например:\n"
+        "• Нужен русскоговорящий стоматолог в Гуанчжоу\n"
+        "• Где снять квартиру в Фошане?\n"
+        "• Кто знает карго из Китая в Москву?\n"
+        "• Где найти переводчика в Гуанчжоу?\n\n"
+        "Если информации в базе недостаточно, я стараюсь не придумывать ответ."
     )
 
+    await update.message.reply_text(text)
 
-async def faq_command(update: Update, context):
-    faq_items = DATA.get("faq", [])
 
-    if not faq_items:
-        await update.message.reply_text(
-            "📚 FAQ пока пуст."
-        )
+async def faq_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    faq = DATA.get("faq", [])
+
+    if not faq:
+        await update.message.reply_text("Пока база FAQ пустая.")
         return
 
-    lines = [
-        "📚 FAQ:\n"
-    ]
+    lines = ["📚 Сейчас я знаю:"]
 
-    for index, item in enumerate(
-        faq_items,
-        start=1
-    ):
-        question = item.get(
-            "question",
-            "Без названия"
-        )
+    for i, item in enumerate(faq, 1):
+        question = item.get("question", "Без названия")
+        lines.append(f"{i}. {question}")
 
-        category = item.get(
-            "category",
-            "other"
-        )
-
-        lines.append(
-            f"{index}. [{category}] {question}"
-        )
-
-    await update.message.reply_text(
-        "\n".join(lines)
-    )
+    await update.message.reply_text("\n".join(lines))
 
 
-async def contacts_command(update: Update, context):
+async def contacts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contacts = DATA.get("contacts", [])
 
     if not contacts:
         await update.message.reply_text(
-            "👥 Контактов пока нет.\n\n"
-            "Но структура для них уже готова."
+            "📇 В базе пока нет структурированных контактов."
         )
         return
 
-    lines = [
-        "👥 Актуальные контакты:\n"
-    ]
+    lines = ["📇 Контакты:"]
 
     for item in contacts[:20]:
-        lines.append(
-            format_contact(item)
-        )
-        lines.append("")
+        name = item.get("name", "Без имени")
+        service = item.get("service", "")
+        city = item.get("city", "")
 
-    await update.message.reply_text(
-        "\n".join(lines)
-    )
+        line = f"• {name}"
+
+        if service:
+            line += f" — {service}"
+
+        if city:
+            line += f" ({city})"
+
+        lines.append(line)
+
+    await update.message.reply_text("\n".join(lines))
 
 
-async def announcements_command(update: Update, context):
-    active = [
+async def announcements_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    announcements = [
         item
         for item in DATA.get("announcements", [])
         if is_announcement_active(item)
     ]
 
-    if not active:
+    if not announcements:
         await update.message.reply_text(
-            "📢 Актуальных объявлений пока нет."
+            "📢 Сейчас активных объявлений в базе нет."
         )
         return
 
-    lines = [
-        "📢 Актуальные объявления:\n"
-    ]
-
-    for item in active[:20]:
-        lines.append(
-            format_announcement(item)
-        )
-        lines.append("")
-
-    await update.message.reply_text(
-        "\n".join(lines)
-    )
+    for item in announcements[:10]:
+        await update.message.reply_text(format_announcement(item))
 
 
 # ============================================================
-# ADMIN: FAQ
+# ADMIN COMMANDS
 # ============================================================
 
-async def list_faq(update: Update, context):
-    if not await is_admin(update, context):
-        return
+def is_admin(update):
+    user = update.effective_user
 
-    items = DATA.get("faq", [])
+    if not user:
+        return False
 
-    if not items:
+    # Временная версия:
+    # реальные admin-ID можно добавить позже.
+    admin_ids = set()
+
+    return user.id in admin_ids
+
+
+async def addcontact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
         await update.message.reply_text(
-            "FAQ пуст."
+            "⛔ Команда пока доступна только настроенным администраторам."
         )
-        return
-
-    lines = ["📚 FAQ:"]
-
-    for item in items:
-        lines.append(
-            f"{item.get('id')} — "
-            f"{item.get('question')}"
-        )
-
-    await update.message.reply_text(
-        "\n".join(lines)
-    )
-
-
-async def add_faq(update: Update, context):
-    if not await is_admin(update, context):
-        return
-
-    text = update.message.text
-
-    payload = text.partition(" ")[2].strip()
-
-    if "|" not in payload:
-        await update.message.reply_text(
-            "Формат:\n"
-            "/addfaq вопрос | ответ"
-        )
-        return
-
-    question, answer = [
-        x.strip()
-        for x in payload.split("|", 1)
-    ]
-
-    if not question or not answer:
-        await update.message.reply_text(
-            "Нужно указать и вопрос, и ответ."
-        )
-        return
-
-    item_id = (
-        f"faq_{len(DATA['faq']) + 1:03d}"
-    )
-
-    item = {
-        "id": item_id,
-        "category": "other",
-        "question": question,
-        "keywords": list(
-            tokens(question)
-        ),
-        "answer": answer,
-        "source": {}
-    }
-
-    DATA["faq"].append(item)
-
-    save_data(DATA)
-
-    await update.message.reply_text(
-        f"✅ FAQ добавлен.\nID: {item_id}"
-    )
-
-
-async def delete_faq(update: Update, context):
-    if not await is_admin(update, context):
-        return
-
-    args = context.args
-
-    if not args:
-        await update.message.reply_text(
-            "Формат:\n"
-            "/delfaq faq_001"
-        )
-        return
-
-    item_id = args[0]
-
-    old_length = len(DATA["faq"])
-
-    DATA["faq"] = [
-        item
-        for item in DATA["faq"]
-        if item.get("id") != item_id
-    ]
-
-    if len(DATA["faq"]) == old_length:
-        await update.message.reply_text(
-            "❌ FAQ с таким ID не найден."
-        )
-        return
-
-    save_data(DATA)
-
-    await update.message.reply_text(
-        f"✅ FAQ {item_id} удалён."
-    )
-
-
-# ============================================================
-# ADMIN: CONTACTS
-# ============================================================
-
-async def list_contacts(update: Update, context):
-    if not await is_admin(update, context):
-        return
-
-    contacts = DATA.get("contacts", [])
-
-    if not contacts:
-        await update.message.reply_text(
-            "👥 Контактов пока нет."
-        )
-        return
-
-    lines = ["👥 Контакты:"]
-
-    for item in contacts:
-        lines.append(
-            f"{item.get('id')} — "
-            f"{item.get('name')} "
-            f"({item.get('category')})"
-        )
-
-    await update.message.reply_text(
-        "\n".join(lines)
-    )
-
-
-async def add_contact(update: Update, context):
-    if not await is_admin(update, context):
         return
 
     await update.message.reply_text(
-        "👤 Структура контактов уже заложена.\n\n"
-        "Автоматическое добавление через команду "
-        "подключим следующим этапом, чтобы не "
-        "запихивать JSON в Telegram-команды."
+        "Команда добавления контактов будет подключена следующим этапом."
     )
 
 
-async def delete_contact(update: Update, context):
-    if not await is_admin(update, context):
-        return
-
-    args = context.args
-
-    if not args:
+async def addannouncement(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    if not is_admin(update):
         await update.message.reply_text(
-            "Формат:\n"
-            "/delcontact contact_001"
+            "⛔ Команда пока доступна только настроенным администраторам."
         )
-        return
-
-    item_id = args[0]
-
-    old_length = len(DATA["contacts"])
-
-    DATA["contacts"] = [
-        item
-        for item in DATA["contacts"]
-        if item.get("id") != item_id
-    ]
-
-    if len(DATA["contacts"]) == old_length:
-        await update.message.reply_text(
-            "❌ Контакт не найден."
-        )
-        return
-
-    save_data(DATA)
-
-    await update.message.reply_text(
-        f"✅ Контакт {item_id} удалён."
-    )
-
-
-# ============================================================
-# ADMIN: ANNOUNCEMENTS
-# ============================================================
-
-async def list_announcements(update: Update, context):
-    if not await is_admin(update, context):
-        return
-
-    active = [
-        item
-        for item in DATA.get("announcements", [])
-        if is_announcement_active(item)
-    ]
-
-    if not active:
-        await update.message.reply_text(
-            "📢 Активных объявлений нет."
-        )
-        return
-
-    lines = ["📢 Активные объявления:"]
-
-    for item in active:
-        lines.append(
-            f"{item.get('id')} — "
-            f"{item.get('text', '')[:80]}"
-        )
-
-    await update.message.reply_text(
-        "\n".join(lines)
-    )
-
-
-async def add_announcement(update: Update, context):
-    if not await is_admin(update, context):
         return
 
     await update.message.reply_text(
-        "📢 Структура временных объявлений уже готова.\n\n"
-        "Следующим этапом подключим автоматическое "
-        "распознавание объявлений прямо из сообщений группы."
-    )
-
-
-async def delete_announcement(update: Update, context):
-    if not await is_admin(update, context):
-        return
-
-    args = context.args
-
-    if not args:
-        await update.message.reply_text(
-            "Формат:\n"
-            "/delannouncement ann_001"
-        )
-        return
-
-    item_id = args[0]
-
-    old_length = len(DATA["announcements"])
-
-    DATA["announcements"] = [
-        item
-        for item in DATA["announcements"]
-        if item.get("id") != item_id
-    ]
-
-    if len(DATA["announcements"]) == old_length:
-        await update.message.reply_text(
-            "❌ Объявление не найдено."
-        )
-        return
-
-    save_data(DATA)
-
-    await update.message.reply_text(
-        f"✅ Объявление {item_id} удалено."
+        "Команда добавления объявлений будет подключена следующим этапом."
     )
 
 
@@ -1431,148 +1235,127 @@ async def delete_announcement(update: Update, context):
 # MESSAGE HANDLER
 # ============================================================
 
-async def handle_message(update: Update, context):
+def should_answer_question(text):
+    norm = normalize(text)
+
+    if not norm:
+        return False
+
+    question_words = {
+        "где",
+        "как",
+        "кто",
+        "сколько",
+        "можно",
+        "нужен",
+        "нужна",
+        "нужны",
+        "подскажите",
+        "посоветуйте",
+    }
+
+    return (
+        "?" in text
+        or any(word in norm.split() for word in question_words)
+    )
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
-    if not update.message.text:
-        return
-
-    text = update.message.text.strip()
+    text = update.message.text
 
     if not text:
         return
 
-    # Команды обрабатываются отдельными handlers
-    if text.startswith("/"):
-        return
-
+    # Не вмешиваемся в обычный чат.
     intent = detect_intent(text)
 
-    logger.info(
-        "Запрос: %s | intent=%s",
-        text,
-        intent
-    )
-
     # --------------------------------------------------------
-    # ANNOUNCEMENTS
+    # Актуальные объявления
     # --------------------------------------------------------
 
     if intent == "announcement":
-        results = find_announcements(text)
+        announcements = find_announcements(text)
 
-        if results:
-            lines = [
-                "📢 Нашёл актуальные объявления:\n"
-            ]
-
-            for _, item in results:
-                lines.append(
-                    format_announcement(item)
-                )
-                lines.append("")
-
+        if announcements:
+            _, item = announcements[0]
             await update.message.reply_text(
-                "\n".join(lines)
+                format_announcement(item)
             )
-
             return
 
-        # Если объявления не найдены,
-        # не выдаём старые данные.
-        await update.message.reply_text(
-            "🔎 Похоже, ты ищешь актуальное объявление, "
-            "но сейчас в базе ничего подходящего нет."
-        )
-
-        return
-
     # --------------------------------------------------------
-    # CONTACTS
+    # Контакты
     # --------------------------------------------------------
 
     if intent == "contact":
-        results = find_contacts(text)
+        contacts = find_contacts(text)
 
-        if results:
-            lines = [
-                "👥 Нашёл подходящие контакты:\n"
-            ]
-
-            for _, item in results:
-                lines.append(
-                    format_contact(item)
-                )
-                lines.append("")
-
+        if contacts:
+            _, item = contacts[0]
             await update.message.reply_text(
-                "\n".join(lines)
+                "📇 Нашёл контакт:\n\n" + format_contact(item)
             )
-
             return
 
+        # Если контактов нет, не молчим, если есть подходящий FAQ.
+        # Например "нужен стоматолог" пока ищется в FAQ.
+        # Поэтому продолжаем ниже.
+
     # --------------------------------------------------------
-    # FAQ
+    # FAQ / база знаний
     # --------------------------------------------------------
 
-    question_like = (
-        "?" in text
-        or any(
-            word in normalize(text).split()
-            for word in [
-                "где",
-                "как",
-                "кто",
-                "сколько",
-                "можно",
-                "нужен",
-                "нужна",
-                "подскажите"
-            ]
-        )
-    )
+    results = find_faq(text)
 
-    minimum_score = 3 if question_like else 6
-
-    results = find_faq(
-        text,
-        minimum_score=minimum_score
-    )
-
-    if results:
-        best_score, best_item = results[0]
-
-        # Слишком слабое совпадение
-        if best_score < minimum_score:
-            return
-
-        answer = best_item.get(
-            "answer",
-            "Информация не найдена."
-        )
-
-        source = format_source(
-            best_item.get("source")
-        )
-
-        response = (
-            f"🤖 {answer}"
-            f"{source}"
-        )
-
-        await update.message.reply_text(
-            response
-        )
-
+    if not results:
         return
 
-    # --------------------------------------------------------
-    # NOTHING FOUND
-    # --------------------------------------------------------
+    best_score, best_item = results[0]
 
-    # В обычный групповой разговор бот не вмешивается.
-    # Поэтому здесь НИЧЕГО не отправляем.
+    question_like = should_answer_question(text)
+
+    # Для вопроса нужен более низкий порог,
+    # для обычного сообщения — более высокий.
+    minimum_score = 5 if question_like else 10
+
+    if best_score < minimum_score:
+        return
+
+    # Если есть явный тематический термин,
+    # ответ должен быть достаточно уверенным.
+    query_tokens = tokens(text)
+
+    category_scores = {}
+
+    for category, hints in CATEGORY_HINTS.items():
+        hits = query_tokens & hints
+        if hits:
+            category_scores[category] = len(hits)
+
+    if category_scores:
+        strongest_category = max(
+            category_scores,
+            key=category_scores.get
+        )
+
+        if (
+            best_item.get("category") != strongest_category
+            and category_scores[strongest_category] >= 1
+        ):
+            # Не отдаём ответ из чужой категории.
+            return
+
+    answer = best_item.get("answer", "").strip()
+
+    if not answer:
+        return
+
+    answer += format_source(best_item.get("source"))
+
+    await update.message.reply_text(answer)
 
 
 # ============================================================
@@ -1581,9 +1364,9 @@ async def handle_message(update: Update, context):
 
 async def error_handler(update, context):
     logger.error(
-        "Ошибка обработки обновления: %s",
+        "Ошибка при обработке update: %s",
         context.error,
-        exc_info=context.error
+        exc_info=context.error,
     )
 
 
@@ -1592,110 +1375,36 @@ async def error_handler(update, context):
 # ============================================================
 
 def main():
-    application = (
-        Application
-        .builder()
-        .token(TOKEN)
-        .build()
-    )
-
-    # Основные команды
-    application.add_handler(
-        CommandHandler("start", start)
-    )
-
-    application.add_handler(
-        CommandHandler("help", help_command)
-    )
-
-    application.add_handler(
-        CommandHandler("faq", faq_command)
-    )
-
-    application.add_handler(
-        CommandHandler("contacts", contacts_command)
-    )
-
-    application.add_handler(
-        CommandHandler(
-            "announcements",
-            announcements_command
+    if not BOT_TOKEN:
+        raise RuntimeError(
+            "Не найден BOT_TOKEN в переменных окружения Railway."
         )
-    )
 
-    # FAQ admin
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("faq", faq_command))
+    application.add_handler(CommandHandler("contacts", contacts_command))
     application.add_handler(
-        CommandHandler("listfaq", list_faq)
+        CommandHandler("announcements", announcements_command)
     )
 
+    application.add_handler(CommandHandler("addcontact", addcontact))
     application.add_handler(
-        CommandHandler("addfaq", add_faq)
+        CommandHandler("addannouncement", addannouncement)
     )
 
-    application.add_handler(
-        CommandHandler("delfaq", delete_faq)
-    )
-
-    # Contacts admin
-    application.add_handler(
-        CommandHandler(
-            "listcontacts",
-            list_contacts
-        )
-    )
-
-    application.add_handler(
-        CommandHandler(
-            "addcontact",
-            add_contact
-        )
-    )
-
-    application.add_handler(
-        CommandHandler(
-            "delcontact",
-            delete_contact
-        )
-    )
-
-    # Announcements admin
-    application.add_handler(
-        CommandHandler(
-            "listannouncements",
-            list_announcements
-        )
-    )
-
-    application.add_handler(
-        CommandHandler(
-            "addannouncement",
-            add_announcement
-        )
-    )
-
-    application.add_handler(
-        CommandHandler(
-            "delannouncement",
-            delete_announcement
-        )
-    )
-
-    # Обычные сообщения
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
-            handle_message
+            handle_message,
         )
     )
 
-    application.add_error_handler(
-        error_handler
-    )
+    application.add_error_handler(error_handler)
 
-    logger.info(
-        "Бот v0.3 запускается..."
-    )
-
+    logger.info("Bot starting...")
     application.run_polling(
         allowed_updates=Update.ALL_TYPES
     )
