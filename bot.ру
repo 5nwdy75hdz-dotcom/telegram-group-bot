@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DATA = {
     "settings": {
-        "version": "0.5",
+        "version": "0.5.3",
         "announcement_default_days": 3,
         "max_search_results": 5,
     },
@@ -277,6 +277,207 @@ DEFAULT_DATA = {
             },
         },
         {
+            "id": "alipay_topup",
+            "category": "money",
+            "question": "Как пополнить Alipay?",
+            "keywords": [
+                "Alipay",
+                "алипей",
+                "пополнить",
+                "пополнение",
+                "деньги",
+                "юани",
+                "карта",
+                "перевод",
+            ],
+            "answer": (
+                "В группе обсуждались переводы и операции через WeChat и Alipay. "
+                "Способ пополнения зависит от карты и способа оплаты; "
+                "конкретный вариант лучше уточнять перед переводом."
+            ),
+            "source": {
+                "chat": "BezenvKitae",
+                "message_id": "4130–4136",
+                "date": "2026-09-20",
+            },
+        },
+        {
+            "id": "currency_rate",
+            "category": "money",
+            "question": "Какой курс юаня к рублю?",
+            "keywords": [
+                "курс",
+                "курс юаня",
+                "юань",
+                "юани",
+                "рубль",
+                "рубли",
+                "обмен",
+                "обменять",
+            ],
+            "answer": (
+                "Курс меняется, поэтому старые сообщения группы нельзя считать "
+                "актуальным курсом. Если нужен курс для конкретной операции, "
+                "лучше уточнять дату, валюту и способ обмена."
+            ),
+            "source": {
+                "chat": "BezenvKitae",
+                "message_id": "4130–4136",
+                "date": "2026-09-20",
+            },
+        },
+        {
+            "id": "alipay_russian_card",
+            "category": "money",
+            "question": "Можно ли привязать русскую карту к Alipay?",
+            "keywords": [
+                "Alipay",
+                "алипей",
+                "русская карта",
+                "российская карта",
+                "карта",
+                "привязать",
+                "банковская карта",
+            ],
+            "answer": (
+                "В группе обсуждались операции с Alipay и банковскими картами. "
+                "Возможность привязки зависит от типа карты и текущих условий "
+                "Alipay, поэтому это лучше проверять непосредственно перед настройкой."
+            ),
+            "source": {
+                "chat": "BezenvKitae",
+                "message_id": "4130–4136",
+                "date": "2026-09-20",
+            },
+        },
+        {
+            "id": "cash_payment",
+            "category": "money",
+            "question": "Можно платить наличными?",
+            "keywords": [
+                "наличные",
+                "наличными",
+                "оплата наличными",
+                "платить",
+                "оплатить",
+                "деньги",
+                "юани",
+                "кэш",
+            ],
+            "answer": (
+                "В группе обсуждались расчёты наличными и переводы через "
+                "WeChat/Alipay. Возможность оплаты наличными зависит от конкретного "
+                "магазина или услуги — лучше уточнять перед оплатой."
+            ),
+            "source": {
+                "chat": "BezenvKitae",
+                "message_id": "4130–4136",
+                "date": "2026-09-20",
+            },
+        },
+        {
+            "id": "sticks_disposables",
+            "category": "shopping",
+            "question": "Где купить стики и одноразки?",
+            "keywords": [
+                "стики",
+                "IQOS",
+                "айкос",
+                "одноразки",
+                "одноразка",
+                "вейп",
+                "электронная сигарета",
+                "сигареты",
+                "купить",
+            ],
+            "answer": (
+                "В группе были сообщения о местах, где искали или покупали "
+                "стики IQOS и одноразовые устройства. По конкретному району "
+                "и наличию лучше уточнять актуальную информацию в группе."
+            ),
+            "source": {
+                "chat": "BezenvKitae",
+                "message_id": "4116 / 4189 / 4346–4352",
+                "date": "2026-09-20",
+            },
+        },
+        {
+            "id": "housing_general",
+            "category": "housing",
+            "question": "Как снять квартиру?",
+            "keywords": [
+                "снять квартиру",
+                "квартира",
+                "аренда",
+                "снять",
+                "жилье",
+                "жильё",
+                "апартаменты",
+                "арендовать",
+            ],
+            "answer": (
+                "Для аренды жилья в группе упоминались 58, Ziroom и Welcee "
+                "для Гуанчжоу, а также обсуждались варианты во Фошане. "
+                "Если назовёшь город, район и бюджет, искать будет точнее."
+            ),
+            "source": {
+                "chat": "BezenvKitae",
+                "message_id": "3486 / 4017",
+                "date": "2026-09-20",
+            },
+        },
+        {
+            "id": "housing_search_general",
+            "category": "housing",
+            "question": "Где искать жильё?",
+            "keywords": [
+                "где искать жилье",
+                "где искать жильё",
+                "жилье",
+                "жильё",
+                "квартира",
+                "аренда",
+                "снять",
+                "жилье найти",
+            ],
+            "answer": (
+                "В группе для Гуанчжоу упоминались 58, Ziroom и Welcee. "
+                "По Фошаню также есть отдельное обсуждение районов и жилья. "
+                "Для точного поиска лучше указать город, район и бюджет."
+            ),
+            "source": {
+                "chat": "BezenvKitae",
+                "message_id": "3486 / 4017",
+                "date": "2026-09-20",
+            },
+        },
+        {
+            "id": "russian_community_areas",
+            "category": "housing",
+            "question": "Где больше всего живёт русских?",
+            "keywords": [
+                "русские",
+                "русских",
+                "русскоязычные",
+                "где живут русские",
+                "район",
+                "районы",
+                "жить",
+                "живут",
+                "сообщество",
+            ],
+            "answer": (
+                "В группе обсуждались районы для проживания и места, где "
+                "удобнее жить русскоязычным, с учётом инфраструктуры и дороги "
+                "до нужных мест. Можно уточнить город, бюджет и место работы/учёбы."
+            ),
+            "source": {
+                "chat": "BezenvKitae",
+                "message_id": "4009–4013",
+                "date": "2026-09-20",
+            },
+        },
+        {
             "id": "electronics_shenzhen",
             "category": "shopping",
             "question": "Где покупать электронику в Шэньчжэне?",
@@ -512,6 +713,24 @@ CATEGORY_HINTS = {
         "рынок",
         "покупка",
         "товар",
+        "стики",
+        "iqos",
+        "одноразки",
+        "вейп",
+    },
+    "money": {
+        "alipay",
+        "алипей",
+        "карта",
+        "деньги",
+        "курс",
+        "юань",
+        "юани",
+        "рубль",
+        "рубли",
+        "наличные",
+        "оплата",
+        "перевод",
     },
 }
 
@@ -604,6 +823,36 @@ def extract_entities(text):
         "services": extract_services(text),
         "categories": extract_categories(text),
     }
+
+
+def extract_faq_city(item):
+    """
+    Определяет основной город FAQ-карточки.
+
+    Приоритет:
+    1. формулировка вопроса;
+    2. ключевые слова;
+    3. ответ.
+
+    Это важно, если карточка относится к Фошаню, но в ответе
+    дополнительно упоминается Гуанчжоу.
+    """
+    if not isinstance(item, dict):
+        return None
+
+    question = item.get("question", "")
+    city = extract_city(question)
+    if city:
+        return city
+
+    keywords_text = " ".join(
+        str(x) for x in item.get("keywords", [])
+    )
+    city = extract_city(keywords_text)
+    if city:
+        return city
+
+    return extract_city(item.get("answer", ""))
 
 
 # ============================================================
@@ -821,15 +1070,7 @@ def score_faq(query, item):
     answer = item.get("answer", "")
     keywords = item.get("keywords", [])
     category = item.get("category", "")
-    item_city = extract_city(
-        " ".join(
-            [
-                question,
-                answer,
-                " ".join(str(x) for x in keywords),
-            ]
-        )
-    )
+    item_city = extract_faq_city(item)
 
     item_entities = extract_entities(
         " ".join(
@@ -918,12 +1159,49 @@ def score_faq(query, item):
     return score
 
 def find_faq(query):
+    """
+    Ищем FAQ с учётом явно указанного города.
+
+    Если пользователь назвал конкретный город и в базе есть FAQ
+    именно для этого города, сначала ограничиваем поиск этим городом.
+    Это важно для запросов вроде:
+        "жильё в Фошане"
+        "стоматолог в Шэньчжэне"
+
+    Иначе общий FAQ по другой локации может получить высокий балл
+    только из-за совпадения по теме.
+    """
+
+    query_city = extract_city(query)
+
+    all_items = [
+        item
+        for item in DATA.get("faq", [])
+        if isinstance(item, dict)
+    ]
+
+    # --------------------------------------------------------
+    # 1. Если город указан — сначала ищем FAQ этого города.
+    # --------------------------------------------------------
+    if query_city:
+        city_items = []
+
+        for item in all_items:
+            if extract_faq_city(item) == query_city:
+                city_items.append(item)
+
+        # Если для этого города есть карточки, НЕ смешиваем их
+        # с карточками других городов.
+        if city_items:
+            search_items = city_items
+        else:
+            search_items = all_items
+    else:
+        search_items = all_items
+
     results = []
 
-    for item in DATA.get("faq", []):
-        if not isinstance(item, dict):
-            continue
-
+    for item in search_items:
         score = score_faq(query, item)
 
         if score > 0:
@@ -1469,16 +1747,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query_city = entities["city"]
 
     if query_city:
-        item_text = " ".join(
-            [
-                best_item.get("question", ""),
-                best_item.get("answer", ""),
-                " ".join(
-                    str(x) for x in best_item.get("keywords", [])
-                ),
-            ]
-        )
-        item_city = extract_city(item_text)
+        item_city = extract_faq_city(best_item)
 
         # Если человек назвал конкретный город,
         # не отвечаем карточкой другого города.
